@@ -12,6 +12,17 @@
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations';
 
+// FRED가 400/4xx로 거부했을 때, 단순 상태코드만으론 원인을 알 수 없으므로
+// FRED가 함께 내려주는 사유 메시지(error_message)를 최대한 꺼내옵니다.
+async function fredErrorDetail(r) {
+  try {
+    const j = await r.json();
+    return j.error_message || JSON.stringify(j);
+  } catch (e) {
+    try { return await r.text(); } catch (e2) { return ''; }
+  }
+}
+
 // 대시보드 키 -> FRED 시리즈 ID
 const SERIES = {
   base_rate: 'DFEDTARU',     // 연방기금금리 목표 상단
@@ -36,7 +47,10 @@ async function fetchSeries(seriesId, apiKey, scaleKey) {
   // limit=15: 공휴일/결측치("." 값)가 여러 날 이어져도 최신 유효값 2개를 확보하기 위한 여유분
   const url = `${FRED_BASE}?series_id=${encodeURIComponent(seriesId)}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=15`;
   const r = await fetch(url);
-  if (!r.ok) throw new Error(`FRED ${seriesId} HTTP ${r.status}`);
+  if (!r.ok) {
+    const detail = await fredErrorDetail(r);
+    throw new Error(`FRED ${seriesId} HTTP ${r.status}${detail ? ' — ' + detail : ''}`);
+  }
   const data = await r.json();
   const obs = (data.observations || []).filter(o => o && o.value !== '.' && o.value != null);
   if (!obs.length) throw new Error(`FRED ${seriesId}: no valid observations`);
@@ -122,7 +136,8 @@ async function handleFredHistory(env, url) {
 
   const r = await fetch(`${FRED_BASE}?${params.toString()}`);
   if (!r.ok) {
-    return new Response(JSON.stringify({ error: `FRED HTTP ${r.status}` }), { status: 502, headers: jsonHeaders });
+    const detail = await fredErrorDetail(r);
+    return new Response(JSON.stringify({ error: `FRED HTTP ${r.status}`, detail }), { status: 502, headers: jsonHeaders });
   }
   const data = await r.json();
   const scale = SCALE[key] || 1;
