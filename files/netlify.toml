@@ -1,9 +1,0 @@
-[build]
-  publish = "."
-  functions = "netlify/functions"
-
-[build.environment]
-  NODE_VERSION = "20"
-
-# 정적 파일은 그대로 서빙되고, /.netlify/functions/* 경로만 함수로 라우팅됩니다.
-# 별도 redirects 설정은 필요 없습니다 (Netlify 기본 동작).
