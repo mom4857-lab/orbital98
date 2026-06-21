@@ -155,6 +155,15 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
 .trend-svg{width:100%;height:150px;display:block}
 .trend-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px;font-weight:600}
 .trend-empty{font-size:11.5px;color:var(--faint);line-height:1.6;padding:8px 2px}
+.freq-row{display:flex;gap:6px;margin-bottom:10px}
+.freq-tab{font-size:11px;font-weight:700;padding:5px 11px;border-radius:8px;border:1px solid var(--border);
+  background:var(--panel);color:var(--muted);cursor:pointer;font-family:inherit}
+.freq-tab:hover{border-color:var(--accent)}
+.freq-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.exsave-btn{font-size:11px;padding:4px 9px;border-radius:7px;border:1px solid var(--border);
+  background:var(--panel);color:var(--accent);cursor:pointer;font-weight:700;font-family:inherit}
+.exsave-btn:hover{border-color:var(--accent);background:var(--accent-bg)}
+.expect input[type=date]{width:118px}
 
 /* settings drawer */
 .drawer{background:var(--panel);border:1px solid var(--border);border-radius:16px;margin-bottom:22px;overflow:hidden}
@@ -405,11 +414,11 @@ const DEFAULT = () => ({
   vals:    Object.fromEntries(INDICATORS.map(i=>[i.key, i.val])),
   chgs:    Object.fromEntries(INDICATORS.map(i=>[i.key, i.chg ?? null])),
   manual:  Object.fromEntries(INDICATORS.filter(i=>i.mode==='manual').map(i=>[i.key, i.manual])),
-  expect:  Object.fromEntries(INDICATORS.filter(i=>i.expect).map(i=>[i.key, {r:'',e:''}])),
+  expect:  Object.fromEntries(INDICATORS.filter(i=>i.expect).map(i=>[i.key, {r:'',e:'',d:''}])),
   weights: Object.fromEntries(CATS.map(c=>[c.key, c.weight])),
   open:    Object.fromEntries(CATS.map(c=>[c.key, true])),
   customBands: {}, bandOpen: {},
-  history: {}, trendOpen: {}, trendRange: {},
+  history: {}, trendOpen: {}, trendRange: {}, trendFreq: {},
   manualOverride: {},
   fomcMeetings: {}, fomcActiveKey: null, fomcPathFilter: {},
   fomcOpen: true,
@@ -426,6 +435,7 @@ async function load(){
       weights:{...DEFAULT().weights,...saved.weights}, open:{...DEFAULT().open,...saved.open},
       customBands:{...(saved.customBands||{})}, bandOpen:{...(saved.bandOpen||{})},
       history:{...(saved.history||{})}, trendOpen:{...(saved.trendOpen||{})}, trendRange:{...(saved.trendRange||{})},
+      trendFreq:{...(saved.trendFreq||{})},
       manualOverride:{...(saved.manualOverride||{})},
       fomcMeetings:{...(saved.fomcMeetings||{})}, fomcActiveKey: saved.fomcActiveKey||null,
       fomcPathFilter:{...(saved.fomcPathFilter||{})} };
@@ -501,17 +511,40 @@ const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim()
 const sigCls = s=>({buy:'s-buy',neu:'s-neu',sell:'s-sell',off:'s-off'}[s]);
 function fmt(v,unit){ if(v==null||isNaN(v)) return '—'; let n = Math.abs(v)>=1000? v.toLocaleString('en-US',{maximumFractionDigits:0}) : v.toString(); return n; }
 
-function buildTrendChart(i){
-  const range = S.trendRange[i.key];
-  let hist = (S.history[i.key]||[]).filter(p=>p.v!=null && !isNaN(p.v)).sort((a,b)=>a.t.localeCompare(b.t));
-  if(range && range.from) hist = hist.filter(p=>p.t>=range.from);
-  if(range && range.to) hist = hist.filter(p=>p.t<=range.to);
-  if(hist.length<2){
-    return `<div class="trend-empty">${(S.history[i.key]||[]).length? '선택한 기간에 데이터가 부족합니다. 기간을 넓혀보세요.' : '추세 데이터가 쌓이는 중입니다. 값을 갱신할 때마다 오늘 날짜로 한 점씩 기록되고, 매일 사용할수록 그래프가 채워집니다.'}</div>`;
+// FRED 공식 API로 실제 과거 데이터를 조회할 수 있는 지표 키 (worker.js의 SERIES와 동일 — base_rate 제외)
+const FRED_HISTORY_KEYS = new Set(['t10y2y','dgs10','dgs2','dgs30','wti','brent','hyspread','m2','walcl','tga','rrp']);
+// FRED 과거 데이터 조회 결과 캐시 (저장하지 않음 — 새로고침 시 다시 조회)
+const FRED_HIST_CACHE = {}; // key -> {points:[{t,v}], freq, loading, error}
+
+async function queryTrend(key){
+  if(!FRED_HISTORY_KEYS.has(key)){ render(); return; } // 수기입력 지표는 로컬 기록이라 즉시 재렌더만 하면 됨
+  const range = S.trendRange[key]||{};
+  const freq = S.trendFreq[key]||'d';
+  FRED_HIST_CACHE[key] = {...(FRED_HIST_CACHE[key]||{}), loading:true, error:null};
+  render();
+  try{
+    const params = new URLSearchParams({key, freq});
+    if(range.from) params.set('from', range.from);
+    if(range.to) params.set('to', range.to);
+    const resp = await fetch(`/api/fred-history?${params.toString()}`);
+    if(!resp.ok){
+      const errPayload = await resp.json().catch(()=>({}));
+      throw new Error(errPayload.error || ('http-'+resp.status));
+    }
+    const payload = await resp.json();
+    FRED_HIST_CACHE[key] = {points: payload.points||[], freq, loading:false, error:null};
+  }catch(e){
+    FRED_HIST_CACHE[key] = {points: (FRED_HIST_CACHE[key]&&FRED_HIST_CACHE[key].points)||[], freq, loading:false, error:String(e.message||e)};
   }
+  render();
+}
+
+function renderTrendSVG(hist, i){
   const W=680,H=190,padL=52,padR=20,padT=28,padB=30;
   const innerW=W-padL-padR, innerH=H-padT-padB;
-  const bands = getBands(i);
+  // 전월/전주比(%) 기준 구간은 레벨값 그래프와 척도가 달라 표시하지 않음
+  const showBands = i.mode!=='change';
+  const bands = showBands ? getBands(i) : [];
   const vals = hist.map(p=>p.v);
   let lo=Math.min(...vals), hi=Math.max(...vals);
   bands.forEach(b=>{ if(b.min!=null && b.min>lo-1e9) lo=Math.min(lo,b.min); if(b.max!=null) hi=Math.max(hi,b.max); });
@@ -546,6 +579,26 @@ function buildTrendChart(i){
     <text x="${lastX}" y="${H-9}" font-size="10" text-anchor="end" style="fill:var(--faint)">${last.t}</text>
   </svg>
   <div class="trend-meta"><span>${hist.length}개 기록</span><span style="color:${trendColor}">${delta>=0?'▲':'▼'} ${Math.abs(round(delta,3))} (선택 기간 변화)</span></div>`;
+}
+
+function buildTrendChart(i){
+  if(FRED_HISTORY_KEYS.has(i.key)){
+    const cache = FRED_HIST_CACHE[i.key];
+    if(!cache) return `<div class="trend-empty">"조회" 버튼을 누르면 FRED 공식 과거 데이터를 직접 가져옵니다.</div>`;
+    if(cache.loading) return `<div class="trend-empty"><span class="spin"></span> FRED 과거 데이터 조회 중…</div>`;
+    if(cache.error) return `<div class="trend-empty">조회 실패: ${cache.error} — 잠시 후 다시 시도해주세요.</div>`;
+    const pts = (cache.points||[]).filter(p=>p.v!=null && !isNaN(p.v));
+    if(pts.length<2) return `<div class="trend-empty">선택한 기간에 데이터가 없습니다. 기간을 넓혀서 다시 조회해보세요.</div>`;
+    return renderTrendSVG(pts, i);
+  }
+  const range = S.trendRange[i.key];
+  let hist = (S.history[i.key]||[]).filter(p=>p.v!=null && !isNaN(p.v)).sort((a,b)=>a.t.localeCompare(b.t));
+  if(range && range.from) hist = hist.filter(p=>p.t>=range.from);
+  if(range && range.to) hist = hist.filter(p=>p.t<=range.to);
+  if(hist.length<2){
+    return `<div class="trend-empty">${(S.history[i.key]||[]).length? '선택한 기간에 데이터가 부족합니다. 기간을 넓혀보세요.' : '추세 데이터가 없습니다. 위 "결과" 칸에 값과 날짜를 입력하고 "저장"을 누르면 기록이 쌓입니다.'}</div>`;
+  }
+  return renderTrendSVG(hist, i);
 }
 
 const PATH_COLORS = ['#4C8DFF','#34C77B','#E3A93C','#E5484D','#A78BFA','#22D3EE','#F472B6','#FB923C'];
@@ -857,14 +910,16 @@ function indRow(i){
     </div><div class="right"></div></div>`);
   const right = row.querySelector('.right');
 
-  // expect fields (수기 결/예) — 결과값은 숫자로 파싱되면 추세 차트용으로도 저장됩니다
+  // expect fields (수기 결/예) — 날짜를 지정하고 "저장"을 누르면 그 날짜로 추세 기록에 누적됩니다
   if(i.expect){
-    const ex = S.expect[i.key]||{r:'',e:''};
+    const ex = S.expect[i.key]||{r:'',e:'',d:''};
     const meta = row.querySelector('.meta');
     const exDiv = el(`<div class="expect">
+      <input type="date" data-exdate="${i.key}" value="${ex.d||''}" title="이 값이 발표/해당된 날짜">
       <input placeholder="결과(숫자)" value="${ex.r}" data-ex="${i.key}" data-f="r">
       <span>/</span>
-      <input placeholder="예상" value="${ex.e}" data-ex="${i.key}" data-f="e"></div>`);
+      <input placeholder="예상" value="${ex.e}" data-ex="${i.key}" data-f="e">
+      <button class="exsave-btn" data-exsave="${i.key}" title="지정한 날짜로 추세 기록에 저장">저장</button></div>`);
     meta.appendChild(exDiv);
   }
 
@@ -919,14 +974,25 @@ function indRow(i){
   if(S.trendOpen[i.key]){
     const tpanel = el(`<div class="trend-panel"></div>`);
     const range = S.trendRange[i.key]||{};
+    const isFred = FRED_HISTORY_KEYS.has(i.key);
     const rangeRow = el(`<div class="range-row">
       <span>기간</span>
       <input type="date" data-trendfrom="${i.key}" value="${range.from||''}">
       <span>~</span>
       <input type="date" data-trendto="${i.key}" value="${range.to||''}">
       <button class="btn ghost" data-trendreset="${i.key}">전체 기간</button>
+      <button class="btn primary" data-trendquery="${i.key}">조회</button>
     </div>`);
     tpanel.appendChild(rangeRow);
+    if(isFred){
+      const freq = S.trendFreq[i.key]||'d';
+      const freqRow = el(`<div class="freq-row">
+        <button class="freq-tab ${freq==='d'?'active':''}" data-trendfreq="${i.key}" data-freqval="d">일</button>
+        <button class="freq-tab ${freq==='w'?'active':''}" data-trendfreq="${i.key}" data-freqval="w">주(평균)</button>
+        <button class="freq-tab ${freq==='m'?'active':''}" data-trendfreq="${i.key}" data-freqval="m">월(평균)</button>
+      </div>`);
+      tpanel.appendChild(freqRow);
+    }
     const chartDiv = el(`<div></div>`);
     chartDiv.innerHTML = buildTrendChart(i);
     tpanel.appendChild(chartDiv);
@@ -986,13 +1052,31 @@ function bind(){
   });
   document.querySelectorAll('[data-ex]').forEach(inp=> inp.addEventListener('change',e=>{
     const k=e.target.dataset.ex,f=e.target.dataset.f;
-    if(!S.expect[k])S.expect[k]={r:'',e:''}; S.expect[k][f]=e.target.value;
+    if(!S.expect[k])S.expect[k]={r:'',e:'',d:''}; S.expect[k][f]=e.target.value;
     if(f==='r'){
       const num = parseFloat(e.target.value.replace(/,/g,'').trim());
       S.vals[k] = isNaN(num) ? null : num;
     }
     save(); render();
   }));
+  document.querySelectorAll('[data-exdate]').forEach(inp=> inp.addEventListener('change',e=>{
+    const k=e.target.dataset.exdate; if(!S.expect[k])S.expect[k]={r:'',e:'',d:''};
+    S.expect[k].d = e.target.value; save(); render();
+  }));
+  document.querySelectorAll('[data-exsave]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.exsave; const ex=S.expect[k]||{r:'',e:'',d:''};
+    const num = parseFloat(String(ex.r).replace(/,/g,'').trim());
+    if(isNaN(num)){ toast('저장할 결과(숫자) 값을 먼저 입력하세요'); return; }
+    const t = ex.d || todayStr();
+    if(!S.history[k]) S.history[k]=[];
+    const arr = S.history[k];
+    const idx = arr.findIndex(p=>p.t===t);
+    if(idx>=0) arr[idx].v=num; else arr.push({t,v:num});
+    arr.sort((a,b)=>a.t.localeCompare(b.t));
+    if(arr.length>365) arr.splice(0, arr.length-365);
+    save(); render();
+    toast(`✓ ${t} 기록 저장 완료`);
+  });
   document.getElementById('ai-btn').onclick = aiUpdate;
 
   // threshold (band) editor
@@ -1029,7 +1113,9 @@ function bind(){
 
   // trend chart toggle
   document.querySelectorAll('[data-trendtoggle]').forEach(b=> b.onclick=()=>{
-    const k=b.dataset.trendtoggle; S.trendOpen[k]=!S.trendOpen[k]; save(); render();
+    const k=b.dataset.trendtoggle; const opening=!S.trendOpen[k];
+    S.trendOpen[k]=opening; save(); render();
+    if(opening && FRED_HISTORY_KEYS.has(k) && !FRED_HIST_CACHE[k]) queryTrend(k);
   });
   document.querySelectorAll('[data-trendfrom]').forEach(inp=> inp.addEventListener('change',e=>{
     const k=e.target.dataset.trendfrom; if(!S.trendRange[k])S.trendRange[k]={};
@@ -1040,7 +1126,13 @@ function bind(){
     S.trendRange[k].to = e.target.value||undefined; save(); render();
   }));
   document.querySelectorAll('[data-trendreset]').forEach(b=> b.onclick=()=>{
-    delete S.trendRange[b.dataset.trendreset]; save(); render();
+    const k=b.dataset.trendreset; delete S.trendRange[k]; save(); render();
+    if(FRED_HISTORY_KEYS.has(k)) queryTrend(k);
+  });
+  document.querySelectorAll('[data-trendquery]').forEach(b=> b.onclick=()=> queryTrend(b.dataset.trendquery));
+  document.querySelectorAll('[data-trendfreq]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.trendfreq; S.trendFreq[k]=b.dataset.freqval; save();
+    if(FRED_HISTORY_KEYS.has(k)) queryTrend(k); else render();
   });
 
   // manual override (수동 재정의)
