@@ -529,7 +529,8 @@ async function queryTrend(key){
     const resp = await fetch(`/api/fred-history?${params.toString()}`);
     if(!resp.ok){
       const errPayload = await resp.json().catch(()=>({}));
-      throw new Error(errPayload.error || ('http-'+resp.status));
+      const msg = (errPayload.error || ('http-'+resp.status)) + (errPayload.detail ? ' — '+errPayload.detail : '');
+      throw new Error(msg);
     }
     const payload = await resp.json();
     FRED_HIST_CACHE[key] = {points: payload.points||[], freq, loading:false, error:null};
