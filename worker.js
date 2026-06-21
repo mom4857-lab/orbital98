@@ -82,12 +82,66 @@ async function handleFredData(env) {
   );
 }
 
+// /api/fred-history — "추세 보기"에서 기간을 지정해 실제 FRED 과거 데이터를
+// 일간(d)/주간평균(w)/월간평균(m) 단위로 조회할 때 사용합니다.
+// 쿼리 파라미터: key(대시보드 지표 키), from, to(YYYY-MM-DD, 생략 가능), freq(d|w|m, 기본 d)
+async function handleFredHistory(env, url) {
+  const jsonHeaders = { 'Content-Type': 'application/json' };
+  const key = url.searchParams.get('key');
+  const seriesId = SERIES[key];
+  if (!seriesId) {
+    return new Response(JSON.stringify({ error: `알 수 없는 지표 키: ${key}` }), { status: 400, headers: jsonHeaders });
+  }
+
+  const apiKey = env.FRED_API_KEY;
+  if (!apiKey) {
+    return new Response(
+      JSON.stringify({ error: 'FRED_API_KEY가 Cloudflare 환경변수에 설정되어 있지 않습니다.' }),
+      { status: 500, headers: jsonHeaders }
+    );
+  }
+
+  const from = url.searchParams.get('from');
+  const to = url.searchParams.get('to');
+  const freq = url.searchParams.get('freq') || 'd';
+
+  const params = new URLSearchParams({
+    series_id: seriesId,
+    api_key: apiKey,
+    file_type: 'json',
+    sort_order: 'asc',
+  });
+  if (from) params.set('observation_start', from);
+  if (to) params.set('observation_end', to);
+  // 주간/월간은 FRED가 직접 평균(aggregation_method=avg)으로 재집계해줍니다.
+  // 일간(d)은 시리즈 원래 발표 주기 그대로 둡니다 (월간 시리즈를 억지로 일별로 늘리지 않음).
+  if (freq === 'w' || freq === 'm') {
+    params.set('frequency', freq);
+    params.set('aggregation_method', 'avg');
+  }
+
+  const r = await fetch(`${FRED_BASE}?${params.toString()}`);
+  if (!r.ok) {
+    return new Response(JSON.stringify({ error: `FRED HTTP ${r.status}` }), { status: 502, headers: jsonHeaders });
+  }
+  const data = await r.json();
+  const scale = SCALE[key] || 1;
+  const points = (data.observations || [])
+    .filter(o => o && o.value !== '.' && o.value != null)
+    .map(o => ({ t: o.date, v: parseFloat(o.value) * scale }));
+
+  return new Response(JSON.stringify({ points, key, freq }), { status: 200, headers: jsonHeaders });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (url.pathname === '/api/fred-data') {
       return handleFredData(env);
+    }
+    if (url.pathname === '/api/fred-history') {
+      return handleFredHistory(env, url);
     }
 
     // 그 외 요청은 전부 정적 파일(index.html 등)로 넘깁니다.
