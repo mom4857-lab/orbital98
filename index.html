@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>글로벌 매크로 시그널 대시보드</title>
+</head>
+<body>
+<div id="app-root"></div>
+
+<style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap');
+
+:root{
+  --bg:#0B1220; --panel:#121A2B; --panel-2:#0F1726; --border:#21304A;
+  --ink:#E8EEF9; --muted:#8B9AB6; --faint:#5C6B85;
+  --buy:#34C77B; --buy-bg:rgba(52,199,123,.12);
+  --neu:#E3A93C; --neu-bg:rgba(227,169,60,.12);
+  --sell:#E5484D; --sell-bg:rgba(229,72,77,.12);
+  --accent:#4C8DFF; --accent-bg:rgba(76,141,255,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+#app-root{
+  font-family:'Pretendard',system-ui,sans-serif;
+  background:var(--bg); color:var(--ink);
+  min-height:100vh; padding:20px 16px 60px;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1140px;margin:0 auto}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px}
+.title-block .eyebrow{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-bottom:6px}
+.title-block h1{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.title-block .sub{color:var(--muted);font-size:13px;margin-top:6px}
+.top-actions{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.btn{cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--ink);
+  font-family:inherit;font-size:13px;font-weight:600;padding:10px 16px;border-radius:10px;
+  display:inline-flex;align-items:center;gap:8px;transition:.15s}
+.btn:hover{border-color:var(--accent);background:var(--accent-bg)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:wait}
+.btn.ghost{padding:7px 12px;font-size:12px;color:var(--muted)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.status{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:7px;min-height:16px}
+
+/* hero gauge */
+.hero{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--border);
+  border-radius:18px;padding:26px;margin-bottom:22px;display:grid;grid-template-columns:1.15fr 1fr;gap:30px}
+@media(max-width:760px){.hero{grid-template-columns:1fr;gap:22px;padding:20px}.top-actions{align-items:flex-start}}
+.gauge-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px}
+.gauge-head .lbl{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:700}
+.verdict{font-size:34px;font-weight:800;letter-spacing:-.01em;margin:2px 0 14px}
+.score-num{font-size:13px;color:var(--muted)}
+.meter{position:relative;height:64px;margin-top:4px}
+.meter-track{position:absolute;top:26px;left:0;right:0;height:12px;border-radius:8px;
+  background:linear-gradient(90deg,var(--sell) 0%,var(--sell) 24%,var(--neu) 42%,var(--neu) 58%,var(--buy) 76%,var(--buy) 100%);
+  opacity:.85}
+.meter-ticks{position:absolute;top:44px;left:0;right:0;display:flex;justify-content:space-between;font-size:10px;color:var(--faint);font-weight:600}
+.needle{position:absolute;top:14px;width:3px;height:36px;background:var(--ink);border-radius:2px;
+  transform:translateX(-50%);transition:left .6s cubic-bezier(.22,1,.36,1);box-shadow:0 0 0 4px var(--bg)}
+.needle::after{content:'';position:absolute;top:-9px;left:50%;transform:translateX(-50%);
+  border-left:6px solid transparent;border-right:6px solid transparent;border-top:9px solid var(--ink)}
+.tally{display:flex;gap:10px;margin-top:18px}
+.tally .cell{flex:1;text-align:center;border:1px solid var(--border);border-radius:12px;padding:12px 6px}
+.tally .n{font-size:24px;font-weight:800}
+.tally .t{font-size:11px;color:var(--muted);margin-top:2px;font-weight:600}
+
+/* category contribution */
+.contrib .lbl{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:700;margin-bottom:14px}
+.crow{display:grid;grid-template-columns:62px 1fr 40px;align-items:center;gap:10px;margin-bottom:11px}
+.crow .cname{font-size:13px;font-weight:600}
+.crow .cbar{position:relative;height:8px;background:var(--panel-2);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.crow .cmid{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--faint);opacity:.5}
+.crow .cfill{position:absolute;top:0;bottom:0;border-radius:6px;transition:.5s}
+.crow .cval{font-size:12px;text-align:right;color:var(--muted)}
+.crow .cw{font-size:10px;color:var(--faint);font-weight:600}
+
+/* category sections */
+.cat{margin-bottom:14px;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--panel)}
+.cat-head{display:flex;align-items:center;gap:12px;padding:15px 18px;cursor:pointer;user-select:none}
+.cat-head:hover{background:var(--panel-2)}
+.cat-head .chev{color:var(--faint);transition:.2s;font-size:12px}
+.cat.open .chev{transform:rotate(90deg)}
+.cat-head h3{font-size:15px;font-weight:700;flex:1}
+.cat-head .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px}
+.cat-head .wtag{font-size:11px;color:var(--faint);font-weight:600}
+.cat-body{display:none;padding:4px 10px 12px}
+.cat.open .cat-body{display:block}
+
+.ind{display:grid;grid-template-columns:1fr auto;gap:10px 14px;align-items:center;
+  padding:13px 8px;border-top:1px solid var(--border)}
+.ind:first-child{border-top:none}
+.ind .meta{min-width:0}
+.ind .iname{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.iname-link{color:inherit;text-decoration:none;border-bottom:1px dashed var(--faint)}
+.iname-link:hover{color:var(--accent);border-bottom-color:var(--accent)}
+.freq{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:var(--panel-2);color:var(--muted);border:1px solid var(--border)}
+.ind .idesc{font-size:11.5px;color:var(--faint);margin-top:3px;line-height:1.4}
+.ind .idesc a{color:var(--accent);text-decoration:none}
+.ind .idesc a:hover{text-decoration:underline}
+.ind .right{display:flex;align-items:center;gap:12px}
+.val-edit{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:18px;background:transparent;
+  border:1px solid transparent;border-radius:8px;color:var(--ink);width:88px;text-align:right;padding:5px 8px}
+.val-edit:hover{border-color:var(--border)}
+.val-edit:focus{outline:none;border-color:var(--accent);background:var(--panel-2)}
+.chg{font-size:11px;font-weight:600;min-width:50px;text-align:right}
+.up{color:var(--buy)} .down{color:var(--sell)}
+.sigpill{font-size:12px;font-weight:800;padding:6px 12px;border-radius:9px;min-width:54px;text-align:center;letter-spacing:.02em}
+.s-buy{color:var(--buy);background:var(--buy-bg)}
+.s-neu{color:var(--neu);background:var(--neu-bg)}
+.s-sell{color:var(--sell);background:var(--sell-bg)}
+.s-off{color:var(--faint);background:var(--panel-2)}
+select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9px;padding:6px 8px;
+  border:1px solid var(--border);background:var(--panel-2);color:var(--ink);cursor:pointer}
+.expect{display:flex;gap:6px;margin-top:7px}
+.expect input{width:64px;font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--panel-2);
+  border:1px solid var(--border);border-radius:7px;color:var(--ink);padding:4px 7px}
+.expect span{font-size:11px;color:var(--faint);align-self:center}
+
+/* threshold editor */
+.ind-band-wrap{grid-column:1/-1;margin-top:2px}
+.band-toggle{font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;
+  font-weight:700;padding:4px 0;font-family:inherit}
+.band-toggle:hover{text-decoration:underline}
+.band-editor{margin-top:8px;padding:14px;border:1px dashed var(--border);border-radius:12px;background:var(--panel-2)}
+.band-editor-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;flex-wrap:wrap}
+.band-editor-head span{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.03em}
+.band-row{display:grid;grid-template-columns:1fr auto 1fr auto 96px auto;gap:7px;align-items:center;
+  margin-bottom:7px;padding:5px;border-radius:8px}
+.band-row.active{background:var(--accent-bg);box-shadow:inset 0 0 0 1px var(--accent)}
+.band-input{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:var(--panel);
+  border:1px solid var(--border);border-radius:7px;color:var(--ink);padding:7px 6px;width:100%;text-align:center}
+.band-input:focus{outline:none;border-color:var(--accent)}
+.band-row .tilde{color:var(--faint);font-size:11px;text-align:center}
+.sigsel.small{font-size:11.5px;padding:6px 6px;width:100%}
+.band-del{background:none;border:none;color:var(--faint);cursor:pointer;font-size:14px;
+  padding:4px 8px;border-radius:6px;line-height:1}
+.band-del:hover{color:var(--sell);background:var(--sell-bg)}
+.band-add{font-size:11.5px;color:var(--accent);background:none;border:1px dashed var(--accent);
+  border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:700;margin-top:2px}
+.band-add:hover{background:var(--accent-bg)}
+.band-hint{font-size:10.5px;color:var(--faint);margin-top:9px;line-height:1.5}
+@media(max-width:520px){.band-row{grid-template-columns:1fr auto 1fr;grid-template-areas:"min t1 max" "sig sig del";row-gap:6px}
+  .band-row input[data-bfield=min]{grid-area:min}.band-row input[data-bfield=max]{grid-area:max}
+  .band-row .tilde:first-of-type{grid-area:t1}.band-row .tilde:last-of-type{display:none}
+  .band-row select{grid-area:sig}.band-row .band-del{grid-area:del;justify-self:end}}
+
+/* trend chart */
+.toggle-row{display:flex;gap:16px;flex-wrap:wrap}
+.trend-panel{margin-top:8px;padding:14px;border:1px dashed var(--border);border-radius:12px;background:var(--panel-2)}
+.trend-svg{width:100%;height:150px;display:block}
+.trend-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px;font-weight:600}
+.trend-empty{font-size:11.5px;color:var(--faint);line-height:1.6;padding:8px 2px}
+
+/* settings drawer */
+.drawer{background:var(--panel);border:1px solid var(--border);border-radius:16px;margin-bottom:22px;overflow:hidden}
+.drawer-head{display:flex;align-items:center;gap:10px;padding:15px 18px;cursor:pointer}
+.drawer-head:hover{background:var(--panel-2)}
+.drawer-head h3{font-size:14px;font-weight:700;flex:1}
+.drawer-body{display:none;padding:6px 18px 20px}
+.drawer.open .drawer-body{display:block}
+.drawer.open .chev{transform:rotate(90deg)}
+.wgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-top:10px}
+.wcell label{font-size:12px;font-weight:600;display:flex;justify-content:space-between;margin-bottom:7px}
+.wcell label b{font-family:'JetBrains Mono',monospace;color:var(--accent)}
+.wcell input[type=range]{width:100%;accent-color:var(--accent)}
+.note{font-size:12px;color:var(--muted);line-height:1.6;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.note code{font-family:'JetBrains Mono',monospace;color:var(--neu);font-size:11px}
+
+/* FOMC dot plot card */
+.fomc{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--border);
+  border-radius:18px;margin-bottom:22px;overflow:hidden}
+.fomc-head{display:flex;align-items:center;gap:12px;padding:18px 22px;cursor:pointer;user-select:none}
+.fomc-head:hover{background:rgba(255,255,255,.02)}
+.fomc-head h2{font-size:17px;font-weight:800;flex:1;display:flex;align-items:center;gap:8px}
+.fomc-head .eyebrow2{font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);font-weight:700;display:block;margin-bottom:3px}
+.fomc-head .chev{color:var(--faint);transition:.2s;font-size:12px}
+.fomc.open .chev{transform:rotate(90deg)}
+.fomc-meeting{font-size:11px;color:var(--accent);font-weight:700;background:var(--accent-bg);padding:4px 10px;border-radius:20px}
+.fomc-body{display:none;padding:0 22px 22px}
+.fomc.open .fomc-body{display:block}
+.fomc-sub{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin:18px 0 10px;text-transform:uppercase}
+.fomc-sub:first-child{margin-top:4px}
+.path-svg{width:100%;height:320px;display:block}
+.fomc-table{width:100%;border-collapse:collapse}
+.fomc-table th{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;text-align:left;
+  padding:6px 8px;font-weight:700;border-bottom:1px solid var(--border)}
+.fomc-table td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.fomc-table tr:last-child td{border-bottom:none}
+.fomc-table .flabel{font-size:13px;font-weight:700;white-space:nowrap}
+.fin{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:var(--panel);border:1px solid var(--border);
+  border-radius:7px;color:var(--ink);padding:6px 8px;width:64px;text-align:center}
+.fin:focus{outline:none;border-color:var(--accent)}
+.fnote{font-family:inherit;font-size:11.5px;background:var(--panel);border:1px solid var(--border);border-radius:7px;
+  color:var(--muted);padding:6px 8px;width:100%;min-width:160px}
+.fnote:focus{outline:none;border-color:var(--accent);color:var(--ink)}
+.flabel-input{font-family:inherit;font-size:12px;font-weight:700;background:var(--panel);border:1px solid var(--border);
+  border-radius:7px;color:var(--ink);padding:6px 8px;width:120px}
+.split-bar{display:flex;height:30px;border-radius:8px;overflow:hidden;margin-bottom:10px;border:1px solid var(--border)}
+.split-seg{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;
+  min-width:0;transition:.4s}
+.split-rows{display:flex;flex-direction:column;gap:8px}
+.split-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+.fomc-foot-label{display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap}
+.fomc-foot-label input{font-family:inherit;font-size:12px;background:var(--panel);border:1px solid var(--border);
+  border-radius:7px;color:var(--ink);padding:6px 10px}
+@media(max-width:680px){.fomc-table{display:block;overflow-x:auto;white-space:nowrap}}
+
+.fomc-upload{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;padding:14px 16px;margin-bottom:6px;
+  border:1px dashed var(--border);border-radius:12px;background:rgba(76,141,255,.04)}
+.fomc-upload-btn{cursor:pointer;border:1px solid var(--accent);background:var(--accent-bg);color:var(--accent);
+  font-family:inherit;font-size:12.5px;font-weight:700;padding:9px 14px;border-radius:9px;display:inline-flex;
+  align-items:center;gap:7px}
+.fomc-upload-btn:hover{background:var(--accent);color:#fff}
+.fomc-upload-btn:disabled{opacity:.5;cursor:wait}
+.fomc-upload input[type=file]{display:none}
+.fomc-upload-hint{font-size:11px;color:var(--faint);flex:1;min-width:160px;width:100%}
+.fomc-paste-area{width:100%;font-family:'JetBrains Mono',monospace;font-size:11.5px;background:var(--panel-2);
+  border:1px solid var(--border);border-radius:9px;color:var(--ink);padding:9px 10px;resize:vertical;min-height:64px}
+.fomc-paste-area:focus{outline:none;border-color:var(--accent)}
+.fomc-upload-status{font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px;width:100%}
+.confidence-tag{font-size:9.5px;font-weight:700;color:var(--neu);background:var(--neu-bg);padding:2px 7px;
+  border-radius:10px;margin-left:6px;letter-spacing:.02em}
+.media-list{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.media-item{display:flex;gap:10px;padding:11px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel-2)}
+.media-outlet{font-size:11px;font-weight:800;color:var(--accent);white-space:nowrap;min-width:74px}
+.media-take{font-size:12.5px;color:var(--ink);line-height:1.55}
+.media-synth{font-size:12.5px;color:var(--muted);line-height:1.65;padding:13px 14px;border-radius:10px;
+  background:rgba(76,141,255,.06);border:1px solid var(--border);margin-bottom:12px}
+
+/* manual signal override */
+.override-row{display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap}
+.override-row select{font-family:inherit;font-weight:700;font-size:11.5px;border-radius:8px;padding:5px 7px;
+  border:1px solid var(--border);background:var(--panel-2);color:var(--ink);cursor:pointer}
+.override-tag{font-size:10px;font-weight:700;color:var(--accent);background:var(--accent-bg);padding:2px 7px;border-radius:10px}
+
+/* trend date range */
+.range-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;font-size:11px;color:var(--faint)}
+.range-row input[type=date]{font-family:inherit;font-size:11.5px;background:var(--panel);border:1px solid var(--border);
+  border-radius:7px;color:var(--ink);padding:5px 7px;color-scheme:dark}
+.cal-icon{background:none;border:none;cursor:pointer;font-size:12px;padding:2px 4px;line-height:1;opacity:.75}
+.cal-icon:hover{opacity:1}
+
+/* weight inputs */
+.wnum{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;background:var(--panel);
+  border:1px solid var(--border);border-radius:8px;color:var(--accent);padding:6px 8px;width:64px;text-align:center}
+.wnum:focus{outline:none;border-color:var(--accent)}
+
+/* FOMC meeting selector + path legend */
+.fomc-meta-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.fomc-meta-row select{font-family:inherit;font-weight:700;font-size:12px;border-radius:9px;padding:7px 10px;
+  border:1px solid var(--border);background:var(--panel-2);color:var(--ink);cursor:pointer}
+.path-legend{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 16px}
+.path-chip{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted);
+  background:var(--panel-2);border:1px solid var(--border);border-radius:20px;padding:5px 11px;cursor:pointer;user-select:none}
+.path-chip.off{opacity:.4;text-decoration:line-through}
+.path-chip .sw{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.fomc-empty{font-size:12.5px;color:var(--faint);line-height:1.7;padding:24px 10px;text-align:center}
+
+footer{text-align:center;color:var(--faint);font-size:11px;margin-top:30px;line-height:1.7}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px 20px;
+  font-size:13px;font-weight:600;box-shadow:0 10px 40px rgba(0,0,0,.5);opacity:0;transition:.35s;z-index:99}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+.spin{width:14px;height:14px;border:2px solid var(--faint);border-top-color:var(--accent);border-radius:50%;
+  display:inline-block;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<script>
+//============================ CONFIG ============================//
+const FRED = id => `https://fred.stlouisfed.org/series/${id}`;
+const SIG = {buy:'매수', neu:'중립', sell:'매도', off:'제외'};
+const SCORE = {buy:1, neu:0, sell:-1};
+
+// band evaluator: explicit [min, max) ranges. min=null → −∞, max=null → +∞. first match wins.
+function evalBands(v, bands){
+  if(v===null||v===undefined||isNaN(v)) return 'off';
+  if(!bands || !bands.length) return 'off';
+  for(const b of bands){
+    const minOk = b.min===null||b.min===undefined || v>=b.min;
+    const maxOk = b.max===null||b.max===undefined || v<b.max;
+    if(minOk && maxOk) return b.sig;
+  }
+  return 'off';
+}
+
+// Category default weights (sum 100)
+const CATS = [
+  {key:'rate',  name:'금리',   weight:15},
+  {key:'oil',   name:'유가',   weight:10},
+  {key:'infl',  name:'물가',   weight:15},
+  {key:'liq',   name:'유동성', weight:20},
+  {key:'job',   name:'고용',   weight:10},
+  {key:'fx',    name:'환율',   weight:5},
+  {key:'sent',  name:'심리',   weight:15},
+  {key:'fomc',  name:'FOMC',  weight:10},
+];
+
+// indicator definitions. mode: 'band' (level), 'change' (MoM%), 'manual', 'info'
+const INDICATORS = [
+  // 금리
+  {key:'t10y2y', cat:'rate', name:'2-10년 금리차', unit:'%', freq:'매일', mode:'band', val:0.40, chg:-0.024,
+   src:FRED('T10Y2Y'), desc:'장단기 금리차. 양(+)이면 정상, 역전(–)이면 침체 신호',
+   bands:[{min:null,max:0,sig:'sell'},{min:0,max:0.5,sig:'neu'},{min:0.5,max:null,sig:'buy'}]},
+  {key:'dgs10', cat:'rate', name:'10년물 국채금리', unit:'%', freq:'매일', mode:'band', val:4.51, chg:0.004,
+   src:FRED('DGS10'), desc:'미국 경제 평균 체력. 4.5%↑면 재정부담·유동성 고갈',
+   bands:[{min:null,max:4.0,sig:'buy'},{min:4.0,max:4.5,sig:'neu'},{min:4.5,max:null,sig:'sell'}]},
+  {key:'dgs2', cat:'rate', name:'2년물 국채금리', unit:'%', freq:'매일', mode:'info', val:4.11, chg:0.0074,
+   src:FRED('DGS2'), desc:'기준선 미설정 시 참고용 — 아래 "2년물−기준금리" 파생 계산에도 사용됩니다', bands:[]},
+  {key:'dgs10base', cat:'rate', name:'10년물 − 기준금리', unit:'%p', freq:'매일', mode:'derived', val:null, chg:null,
+   src:FRED('DGS10'), desc:'정상 우상향(+1%↑) = 성장·물가통제 양호 / 음수 = 경기둔화 우려',
+   derive:s=>round(s.vals.dgs10 - s.baseRate,2),
+   bands:[{min:null,max:0,sig:'sell'},{min:0,max:0.5,sig:'neu'},{min:0.5,max:null,sig:'buy'}]},
+  {key:'dgs2base', cat:'rate', name:'2년물 − 기준금리', unit:'%p', freq:'매일', mode:'derived', val:null, chg:null,
+   src:FRED('DGS2'), desc:'−0.25%↓ = 인하 선반영(긍정) / +0.25%↑ = 인상 우려',
+   derive:s=>round(s.vals.dgs2 - s.baseRate,2),
+   bands:[{min:null,max:-0.25,sig:'buy'},{min:-0.25,max:0.25,sig:'neu'},{min:0.25,max:null,sig:'sell'}]},
+  {key:'dgs30', cat:'rate', name:'30년물 국채금리', unit:'%', freq:'매일', mode:'info', val:5.00, chg:0.002,
+   src:FRED('DGS30'), desc:'기준선 미설정 시 참고용(집계 제외) — 구간을 추가하면 시그널에 포함됩니다', bands:[]},
+
+  // 유가
+  {key:'wti', cat:'oil', name:'WTI유', unit:'$', freq:'매일', mode:'band', val:92.16, chg:-0.049,
+   src:FRED('DCOILWTICO'), desc:'65~75 균형(매수) / 75~85 이탈(중립) / 85↑ 물가압력(매도)',
+   bands:[{min:null,max:75,sig:'buy'},{min:75,max:85,sig:'neu'},{min:85,max:null,sig:'sell'}]},
+  {key:'brent', cat:'oil', name:'브렌트유', unit:'$', freq:'매일', mode:'band', val:93.76, chg:-0.052,
+   src:FRED('DCOILBRENTEU'), desc:'70~80 균형(매수) / 80~90 이탈(중립) / 90↑ 물가압력(매도)',
+   bands:[{min:null,max:80,sig:'buy'},{min:80,max:90,sig:'neu'},{min:90,max:null,sig:'sell'}]},
+
+  // 물가 (수기)
+  {key:'cpi', cat:'infl', name:'CPI 소비자물가', unit:'%', freq:'월1회', mode:'manual', val:null, manual:'sell',
+   src:'https://kr.investing.com/economic-calendar/cpi-733', desc:'결과<예상 → 물가안정·금리인하 기대(매수)', expect:true},
+  {key:'corecpi', cat:'infl', name:'근원 CPI', unit:'%', freq:'월1회', mode:'manual', val:null, manual:'sell',
+   src:'https://kr.investing.com/economic-calendar/core-cpi-736', desc:'에너지·식료품 제외 기조 물가', expect:true},
+  {key:'corepce', cat:'infl', name:'근원 PCE', unit:'%', freq:'월1회', mode:'manual', val:null, manual:'off',
+   src:'https://kr.investing.com/economic-calendar/core-pce-price-index-905', desc:'연준이 가장 중시하는 물가지표', expect:true},
+  {key:'ppi', cat:'infl', name:'PPI 생산자물가', unit:'%', freq:'월1회', mode:'manual', val:null, manual:'sell',
+   src:'https://kr.investing.com/economic-calendar/ppi-238', desc:'생산비용 → 향후 CPI 선행. 급등 시 마진 압박', expect:true},
+  {key:'pmi', cat:'infl', name:'PMI 제조업', unit:'', freq:'월1회', mode:'band', val:54, chg:null,
+   src:'https://kr.investing.com/economic-calendar/ism-manufacturing-pmi-173', desc:'50↑ 확장(매수) / 48~52 경계 / 48↓ 위축(매도)',
+   bands:[{min:null,max:48,sig:'sell'},{min:48,max:52,sig:'neu'},{min:52,max:null,sig:'buy'}]},
+
+  // 유동성 (FRED 자동 + 전월비 기반)
+  {key:'m2', cat:'liq', name:'M2 통화량', unit:'십억$', freq:'월1회', mode:'change', val:22804.5, chg:0.005,
+   src:FRED('M2SL'), desc:'전월比 증가 → 유동성↑ 자산상승(매수) / 감소 → 위험자산 압력',
+   bands:[{min:null,max:-0.001,sig:'sell'},{min:-0.001,max:0.001,sig:'neu'},{min:0.001,max:null,sig:'buy'}]},
+  {key:'walcl', cat:'liq', name:'연준 대차대조표', unit:'억$', freq:'주1회', mode:'change', val:67253.97, chg:0.002,
+   src:FRED('WALCL'), desc:'증가=QE(돈 풀기, 매수) / 감소=QT(긴축, 매도)',
+   bands:[{min:null,max:-0.001,sig:'sell'},{min:-0.001,max:0.001,sig:'neu'},{min:0.001,max:null,sig:'buy'}]},
+  {key:'tga', cat:'liq', name:'TGA 잔고', unit:'억$', freq:'주1회', mode:'change', val:8281.22, chg:-0.054,
+   src:FRED('WTREGEN'), desc:'정부계좌. 감소=지출↑ 유동성공급(매수) / 증가=자금흡수(매도)',
+   bands:[{min:null,max:-0.001,sig:'buy'},{min:-0.001,max:0.001,sig:'neu'},{min:0.001,max:null,sig:'sell'}]},
+  {key:'rrp', cat:'liq', name:'역레포(RRP)', unit:'십억$', freq:'월1회', mode:'change', val:3.998, chg:1.608,
+   src:FRED('RRPONTSYD'), desc:'감소=자금 시장유입(매수) / 증가=위험회피(매도)',
+   bands:[{min:null,max:-0.001,sig:'buy'},{min:-0.001,max:0.001,sig:'neu'},{min:0.001,max:null,sig:'sell'}]},
+  {key:'mmf', cat:'liq', name:'MMF 잔액', unit:'조$', freq:'주1회', mode:'change', val:7.873, chg:-0.003,
+   src:'https://www.ici.org/research/stats/mmf', desc:'감소=대기자금 증시유입(매수) / 급증=리스크회피(매도)',
+   bands:[{min:null,max:-0.001,sig:'buy'},{min:-0.001,max:0.001,sig:'neu'},{min:0.001,max:null,sig:'sell'}]},
+
+  // 고용 (수기)
+  {key:'nfp', cat:'job', name:'비농업 고용', unit:'K', freq:'월1회', mode:'manual', val:null, manual:'sell',
+   src:'https://kr.investing.com/economic-calendar/nonfarm-payrolls-227', desc:'적정 강세=경기양호 / 과열=금리인하 지연 부담', expect:true},
+  {key:'unemp', cat:'job', name:'실업률', unit:'%', freq:'월1회', mode:'manual', val:null, manual:'neu',
+   src:'https://kr.investing.com/economic-calendar/unemployment-rate-300', desc:'4~5% 정상 / 5%↑ 둔화 / 6%↑ 침체 가능', expect:true},
+  {key:'claims', cat:'job', name:'실업수당 청구', unit:'K', freq:'주1회', mode:'manual', val:null, manual:'off',
+   src:'https://kr.investing.com/economic-calendar/initial-jobless-claims-294', desc:'증가=해고↑ 둔화신호 / 감소=노동시장 안정', expect:true},
+
+  // 환율
+  {key:'dxy', cat:'fx', name:'달러 인덱스', unit:'', freq:'매일', mode:'band', val:98.908, chg:0.009,
+   src:'https://stock.naver.com/marketindex/exchange/.DXY/price', desc:'<95 신흥국·국장(매수) / 95~105 균형 / 105↑ 시스템리스크(매도)',
+   bands:[{min:null,max:95,sig:'buy'},{min:95,max:105,sig:'neu'},{min:105,max:null,sig:'sell'}]},
+  {key:'usdkrw', cat:'fx', name:'원/달러', unit:'₩', freq:'매일', mode:'band', val:1507.5, chg:0.022,
+   src:'https://m.stock.naver.com/marketindex/exchange/FX_USDKRW', desc:'고환율 = 외국인 환차손 매도세 심화 위험',
+   bands:[{min:null,max:1300,sig:'buy'},{min:1300,max:1450,sig:'neu'},{min:1450,max:null,sig:'sell'}]},
+
+  // 심리
+  {key:'fg', cat:'sent', name:'공포탐욕지수', unit:'', freq:'매일', mode:'band', val:34, chg:null,
+   src:'https://edition.cnn.com/markets/fear-and-greed', desc:'역발상: <45 공포(기회·매수) / 45~70 중립 / 70↑ 탐욕(매도)',
+   bands:[{min:null,max:45,sig:'buy'},{min:45,max:70,sig:'neu'},{min:70,max:null,sig:'sell'}]},
+  {key:'hyspread', cat:'sent', name:'하이일드 스프레드', unit:'%', freq:'매일', mode:'band', val:2.76, chg:0.007,
+   src:FRED('BAMLH0A0HYM2'), desc:'3%↓ 유동성장세(매수) / 3~5% 중립 / 5%↑ 부도위험(매도)',
+   bands:[{min:null,max:3,sig:'buy'},{min:3,max:5,sig:'neu'},{min:5,max:null,sig:'sell'}]},
+  {key:'shiller', cat:'sent', name:'쉴러 PER (S&P)', unit:'', freq:'월1회', mode:'band', val:39.8, chg:-0.009,
+   src:'https://www.gurufocus.com/economic_indicators/56/shiller-pe', desc:'20~30 적정(매수) / 30~40 중립 / 40↑ 역사적 고점(매도)',
+   bands:[{min:null,max:30,sig:'buy'},{min:30,max:40,sig:'neu'},{min:40,max:null,sig:'sell'}]},
+  {key:'retail', cat:'sent', name:'소매 판매', unit:'%', freq:'월1회', mode:'band', val:0, chg:null,
+   src:'https://kr.investing.com/economic-calendar/retail-sales-256', desc:'예측 대비 증감. 예상 상회 → 경기 긍정(매수)',
+   bands:[{min:null,max:-0.0001,sig:'sell'},{min:-0.0001,max:0.0001,sig:'neu'},{min:0.0001,max:null,sig:'buy'}]},
+
+  // FOMC (점도표 카드 우측 상단에서 직접 판단해 입력 — 자동계산 없음)
+  {key:'fomc_manual', cat:'fomc', name:'FOMC 종합 판단', unit:'', freq:'분기', mode:'manual', val:null, manual:'neu',
+   src:'https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm', desc:'점도표·경로·매체 반응을 직접 분석한 뒤 FOMC 카드 우측 상단에서 시그널을 선택하세요'},
+];
+
+//============================ STATE ============================//
+const DEFAULT = () => ({
+  baseRate: 3.75,
+  asOf: '엑셀 최종 기록값 (26.6월 / 6월 2주차)',
+  vals:    Object.fromEntries(INDICATORS.map(i=>[i.key, i.val])),
+  chgs:    Object.fromEntries(INDICATORS.map(i=>[i.key, i.chg ?? null])),
+  manual:  Object.fromEntries(INDICATORS.filter(i=>i.mode==='manual').map(i=>[i.key, i.manual])),
+  expect:  Object.fromEntries(INDICATORS.filter(i=>i.expect).map(i=>[i.key, {r:'',e:''}])),
+  weights: Object.fromEntries(CATS.map(c=>[c.key, c.weight])),
+  open:    Object.fromEntries(CATS.map(c=>[c.key, true])),
+  customBands: {}, bandOpen: {},
+  history: {}, trendOpen: {}, trendRange: {},
+  manualOverride: {},
+  fomcMeetings: {}, fomcActiveKey: null, fomcPathFilter: {},
+  fomcOpen: true,
+  settingsOpen:true, lastUpdate:null,
+});
+let S = DEFAULT();
+const KEY = 'macro_signal_dashboard_v1';
+
+async function load(){
+  try{ const raw = localStorage.getItem(KEY);
+    if(raw){ const saved = JSON.parse(raw); S = {...DEFAULT(), ...saved,
+      vals:{...DEFAULT().vals,...saved.vals}, chgs:{...DEFAULT().chgs,...saved.chgs},
+      manual:{...DEFAULT().manual,...saved.manual}, expect:{...DEFAULT().expect,...saved.expect},
+      weights:{...DEFAULT().weights,...saved.weights}, open:{...DEFAULT().open,...saved.open},
+      customBands:{...(saved.customBands||{})}, bandOpen:{...(saved.bandOpen||{})},
+      history:{...(saved.history||{})}, trendOpen:{...(saved.trendOpen||{})}, trendRange:{...(saved.trendRange||{})},
+      manualOverride:{...(saved.manualOverride||{})},
+      fomcMeetings:{...(saved.fomcMeetings||{})}, fomcActiveKey: saved.fomcActiveKey||null,
+      fomcPathFilter:{...(saved.fomcPathFilter||{})} };
+      // migrate legacy single-meeting shape (pre multi-meeting update)
+      if(saved.fomc && saved.fomc.years && !Object.keys(S.fomcMeetings).length){
+        const legacyKey='legacy';
+        S.fomcMeetings[legacyKey] = {meetingLabel:saved.fomc.meetingLabel||'이전 회의', meetingDate:null,
+          years:saved.fomc.years, shifts:saved.fomc.shifts||[], split:saved.fomc.split||[],
+          splitConfidence:saved.fomc.splitConfidence||null, media:saved.fomc.media||[],
+          mediaSynthesis:saved.fomc.mediaSynthesis||'', parsedAt:saved.fomc.pdfParsedAt||null};
+        S.fomcActiveKey = legacyKey; S.fomcPathFilter[legacyKey]=true;
+      }
+    }
+  }catch(e){ /* first run / no storage */ }
+}
+function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function snapshotToday(){
+  const t = todayStr();
+  INDICATORS.forEach(i=>{
+    const v = indValue(i);
+    if(v==null||isNaN(v)) return;
+    if(!S.history[i.key]) S.history[i.key]=[];
+    const arr = S.history[i.key];
+    const idx = arr.findIndex(p=>p.t===t);
+    if(idx>=0) arr[idx].v=v; else arr.push({t,v});
+    if(arr.length>365) arr.splice(0, arr.length-365);
+  });
+}
+let saveT; function save(){ clearTimeout(saveT); saveT=setTimeout(async()=>{
+  snapshotToday();
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){}
+},400); }
+
+//============================ ENGINE ============================//
+const round = (n,d=2)=> n==null||isNaN(n)?null:Math.round(n*Math.pow(10,d))/Math.pow(10,d);
+function indValue(i){ return i.mode==='derived' ? i.derive(S) : S.vals[i.key]; }
+function getBands(i){ return (S.customBands && S.customBands[i.key]) ? S.customBands[i.key] : (i.bands||[]); }
+function ensureCustom(key){
+  if(!S.customBands[key]){
+    const def = INDICATORS.find(x=>x.key===key).bands || [];
+    S.customBands[key] = JSON.parse(JSON.stringify(def));
+  }
+  return S.customBands[key];
+}
+function bandScale(i){ return i.mode==='change' ? 100 : 1; }
+function indSignal(i){
+  if(i.mode==='manual') return S.manual[i.key] || 'off';
+  const ov = S.manualOverride[i.key];
+  if(ov && ov!=='auto') return ov;
+  const bands = getBands(i);
+  const v = i.mode==='change' ? S.chgs[i.key] : indValue(i);
+  return evalBands(v, bands);
+}
+function catScore(ckey){
+  const items = INDICATORS.filter(i=>i.cat===ckey);
+  const scored = items.map(indSignal).filter(s=>s!=='off');
+  if(!scored.length) return {score:null, n:0, b:0, nu:0, s:0};
+  const sum = scored.reduce((a,s)=>a+SCORE[s],0);
+  return {score:sum/scored.length, n:scored.length,
+    b:scored.filter(s=>s==='buy').length, nu:scored.filter(s=>s==='neu').length, s:scored.filter(s=>s==='sell').length};
+}
+function overall(){
+  let wsum=0, acc=0, B=0,N=0,Se=0;
+  CATS.forEach(c=>{ const cs=catScore(c.key); if(cs.score!==null){ const w=S.weights[c.key]; wsum+=w; acc+=w*cs.score; B+=cs.b;N+=cs.nu;Se+=cs.s; }});
+  const score = wsum? acc/wsum : 0;
+  let verdict='중립', cls='s-neu';
+  if(score>=0.33){verdict='매수 우위';cls='s-buy';} else if(score<=-0.33){verdict='매도 우위';cls='s-sell';}
+  return {score, verdict, cls, B, N, Se};
+}
+
+//============================ RENDER ============================//
+const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild;};
+const sigCls = s=>({buy:'s-buy',neu:'s-neu',sell:'s-sell',off:'s-off'}[s]);
+function fmt(v,unit){ if(v==null||isNaN(v)) return '—'; let n = Math.abs(v)>=1000? v.toLocaleString('en-US',{maximumFractionDigits:0}) : v.toString(); return n; }
+
+function buildTrendChart(i){
+  const range = S.trendRange[i.key];
+  let hist = (S.history[i.key]||[]).filter(p=>p.v!=null && !isNaN(p.v)).sort((a,b)=>a.t.localeCompare(b.t));
+  if(range && range.from) hist = hist.filter(p=>p.t>=range.from);
+  if(range && range.to) hist = hist.filter(p=>p.t<=range.to);
+  if(hist.length<2){
+    return `<div class="trend-empty">${(S.history[i.key]||[]).length? '선택한 기간에 데이터가 부족합니다. 기간을 넓혀보세요.' : '추세 데이터가 쌓이는 중입니다. 값을 갱신할 때마다 오늘 날짜로 한 점씩 기록되고, 매일 사용할수록 그래프가 채워집니다.'}</div>`;
+  }
+  const W=680,H=190,padL=52,padR=20,padT=28,padB=30;
+  const innerW=W-padL-padR, innerH=H-padT-padB;
+  const bands = getBands(i);
+  const vals = hist.map(p=>p.v);
+  let lo=Math.min(...vals), hi=Math.max(...vals);
+  bands.forEach(b=>{ if(b.min!=null && b.min>lo-1e9) lo=Math.min(lo,b.min); if(b.max!=null) hi=Math.max(hi,b.max); });
+  if(lo===hi){ lo-=1; hi+=1; }
+  const pad=(hi-lo)*0.18||1; lo-=pad; hi+=pad;
+  const xAt = idx => padL + (hist.length===1?innerW/2:idx/(hist.length-1)*innerW);
+  const yAt = val => padT + innerH - ((val-lo)/(hi-lo))*innerH;
+  const bandColor = {buy:'var(--buy)', neu:'var(--neu)', sell:'var(--sell)'};
+  let bandsSvg='';
+  bands.forEach(b=>{
+    const bmin = (b.min==null)? lo : Math.max(b.min,lo);
+    const bmax = (b.max==null)? hi : Math.min(b.max,hi);
+    if(bmax<=bmin) return;
+    const y1=yAt(bmax), y2=yAt(bmin);
+    bandsSvg += `<rect x="${padL}" y="${y1.toFixed(1)}" width="${innerW}" height="${(y2-y1).toFixed(1)}" style="fill:${bandColor[b.sig]||'var(--faint)'};opacity:.09"></rect>`;
+  });
+  const pts = hist.map((p,idx)=>`${xAt(idx).toFixed(1)},${yAt(p.v).toFixed(1)}`).join(' ');
+  const dots = hist.map((p,idx)=>`<circle cx="${xAt(idx).toFixed(1)}" cy="${yAt(p.v).toFixed(1)}" r="2.8" style="fill:var(--accent)"><title>${p.t} · ${p.v}</title></circle>`).join('');
+  const first=hist[0], last=hist[hist.length-1];
+  const delta = last.v-first.v;
+  const trendColor = delta>=0? 'var(--buy)':'var(--sell)';
+  const firstX = Math.max(xAt(0), padL+18), lastX = Math.min(xAt(hist.length-1), W-padR-18);
+  return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" preserveAspectRatio="xMidYMid meet">
+    ${bandsSvg}
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT+innerH}" style="stroke:var(--border);stroke-width:1"/>
+    <line x1="${padL}" y1="${padT+innerH}" x2="${padL+innerW}" y2="${padT+innerH}" style="stroke:var(--border);stroke-width:1"/>
+    <text x="${padL-8}" y="${padT+9}" font-size="10.5" style="fill:var(--faint)" text-anchor="end">${round(hi,2)}</text>
+    <text x="${padL-8}" y="${padT+innerH}" font-size="10.5" style="fill:var(--faint)" text-anchor="end">${round(lo,2)}</text>
+    <polyline points="${pts}" fill="none" style="stroke:var(--ink);stroke-width:1.8"/>
+    ${dots}
+    <text x="${firstX}" y="${H-9}" font-size="10" text-anchor="start" style="fill:var(--faint)">${first.t}</text>
+    <text x="${lastX}" y="${H-9}" font-size="10" text-anchor="end" style="fill:var(--faint)">${last.t}</text>
+  </svg>
+  <div class="trend-meta"><span>${hist.length}개 기록</span><span style="color:${trendColor}">${delta>=0?'▲':'▼'} ${Math.abs(round(delta,3))} (선택 기간 변화)</span></div>`;
+}
+
+const PATH_COLORS = ['#4C8DFF','#34C77B','#E3A93C','#E5484D','#A78BFA','#22D3EE','#F472B6','#FB923C'];
+function pathColor(idx){ return PATH_COLORS[idx % PATH_COLORS.length]; }
+
+function buildPolicyPathSVG(){
+  const entries = Object.entries(S.fomcMeetings)
+    .filter(([k])=> S.fomcPathFilter[k]!==false)
+    .sort((a,b)=> (a[1].meetingDate||a[1].meetingLabel||'').localeCompare(b[1].meetingDate||b[1].meetingLabel||''));
+  if(!entries.length) return `<div class="trend-empty">FOMC PDF를 업로드하면 정책금리 경로가 표시됩니다.</div>`;
+  // x축 라벨: 가장 최근(우측) 회의의 연도 라벨('2026년 말' 등)을 그대로 사용 — 추세를 달력 연도로 바로 읽을 수 있게
+  const refMeeting = entries[entries.length-1][1];
+  const fallbackLabels = ['1년차','2년차','3년차','장기'];
+  const yearLabels = [0,1,2,3].map(i=>{
+    const y = refMeeting && Array.isArray(refMeeting.years) ? refMeeting.years[i] : null;
+    return (y && y.label) ? y.label : fallbackLabels[i];
+  });
+  const xlabels = ['현재', ...yearLabels];
+  const n = 5;
+  let allVals=[S.baseRate];
+  entries.forEach(([,m])=> (m.years||[]).slice(0,4).forEach(y=>{ if(y.median!=null && !isNaN(y.median)) allVals.push(y.median); }));
+  let lo=Math.min(...allVals), hi=Math.max(...allVals);
+  if(lo===hi){lo-=0.5;hi+=0.5;}
+  const pad=(hi-lo)*0.32||0.3; lo-=pad; hi+=pad;
+  const W=700,H=300,padL=30,padR=30,padT=40,padB=38;
+  const innerW=W-padL-padR, innerH=H-padT-padB;
+  const xAt = idx => padL + idx/(n-1)*innerW;
+  const yAt = v => padT + innerH - ((v-lo)/(hi-lo))*innerH;
+  let svg = `<line x1="${padL}" y1="${padT+innerH}" x2="${padL+innerW}" y2="${padT+innerH}" style="stroke:var(--border);stroke-width:1"/>`;
+  svg += `<circle cx="${xAt(0).toFixed(1)}" cy="${yAt(S.baseRate).toFixed(1)}" r="6" style="fill:var(--ink)"/>`;
+  svg += `<text x="${xAt(0).toFixed(1)}" y="${(yAt(S.baseRate)-18).toFixed(1)}" font-size="15" font-weight="700" text-anchor="start" style="fill:var(--ink)">${S.baseRate.toFixed(2)}%</text>`;
+  entries.forEach(([k,m],mi)=>{
+    const color = pathColor(mi);
+    const pts=[{x:0,v:S.baseRate}];
+    (m.years||[]).slice(0,4).forEach((y,yi)=>{ if(y.median!=null && !isNaN(y.median)) pts.push({x:yi+1, v:y.median}); });
+    const line = pts.map(p=>`${xAt(p.x).toFixed(1)},${yAt(p.v).toFixed(1)}`).join(' ');
+    svg += `<polyline points="${line}" fill="none" style="stroke:${color};stroke-width:3"/>`;
+    pts.slice(1).forEach(p=>{
+      const anchor = p.x>=n-1?'end':(p.x<=1?'start':'middle');
+      svg += `<circle cx="${xAt(p.x).toFixed(1)}" cy="${yAt(p.v).toFixed(1)}" r="4.6" style="fill:${color}"><title>${m.meetingLabel}: ${p.v}%</title></circle>
+        <text x="${xAt(p.x).toFixed(1)}" y="${(yAt(p.v)-13).toFixed(1)}" font-size="13" font-weight="700" text-anchor="${anchor}" style="fill:${color}">${p.v}%</text>`;
+    });
+  });
+  for(let idx=0; idx<n; idx++){
+    svg += `<text x="${xAt(idx).toFixed(1)}" y="${H-12}" font-size="13" text-anchor="middle" style="fill:var(--faint)">${xlabels[idx]}</text>`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" class="path-svg" preserveAspectRatio="xMidYMid meet">${svg}</svg>`;
+}
+
+function renderFomc(){
+  const meetingKeys = Object.keys(S.fomcMeetings).sort((a,b)=>{
+    const ma=S.fomcMeetings[a], mb=S.fomcMeetings[b];
+    return (mb.meetingDate||mb.meetingLabel||'').localeCompare(ma.meetingDate||ma.meetingLabel||'');
+  });
+  if(!S.fomcActiveKey || !S.fomcMeetings[S.fomcActiveKey]) S.fomcActiveKey = meetingKeys[0] || null;
+  const f = S.fomcActiveKey ? S.fomcMeetings[S.fomcActiveKey] : null;
+  const fomcSig = S.manual['fomc_manual'] || 'neu';
+
+  const card = el(`<div class="fomc ${S.fomcOpen?'open':''}">
+    <div class="fomc-head" id="fomc-head">
+      <span class="chev">▶</span>
+      <h2><span><span class="eyebrow2">Federal Reserve · SEP</span>FOMC 점도표</span></h2>
+      <select class="sigsel" data-sig="fomc_manual">
+        <option value="buy" ${fomcSig==='buy'?'selected':''}>매수</option>
+        <option value="neu" ${fomcSig==='neu'?'selected':''}>중립</option>
+        <option value="sell" ${fomcSig==='sell'?'selected':''}>매도</option>
+        <option value="off" ${fomcSig==='off'?'selected':''}>제외</option>
+      </select>
+    </div>
+    <div class="fomc-body"></div>
+  </div>`);
+  const body = card.querySelector('.fomc-body');
+  if(!S.fomcOpen) return card;
+
+  body.appendChild(el(`<div class="fomc-upload">
+    <span class="fomc-upload-hint">분기마다 Claude에게 따로 FOMC SEP 분석을 요청한 뒤, 받은 JSON 결과를 아래에 붙여넣고 저장하세요. (요청용 프롬프트는 README 참고)</span>
+    <textarea class="fomc-paste-area" id="fomc-paste-input" placeholder='{"meetingLabel":"26.6월 FOMC", "years":[...], ...} 형태의 JSON을 여기에 붙여넣기'></textarea>
+    <button class="fomc-upload-btn" type="button" id="fomc-paste-btn">💾 붙여넣은 분석 저장</button>
+    <div class="fomc-upload-status" id="fomc-pdf-status"></div>
+  </div>`));
+
+  if(meetingKeys.length){
+    const metaRow = el(`<div class="fomc-meta-row"></div>`);
+    const sel = el(`<select id="fomc-meeting-select"></select>`);
+    meetingKeys.forEach(k=> sel.appendChild(el(`<option value="${k}" ${k===S.fomcActiveKey?'selected':''}>${S.fomcMeetings[k].meetingLabel||k}</option>`)));
+    metaRow.appendChild(el(`<span style="font-size:11px;color:var(--faint)">표시 중인 회의</span>`));
+    metaRow.appendChild(sel);
+    body.appendChild(metaRow);
+  }
+
+  body.appendChild(el(`<div class="fomc-sub">정책금리 경로 전망 (회의별 비교)</div>`));
+  const pathWrap = el(`<div></div>`); pathWrap.innerHTML = buildPolicyPathSVG();
+  body.appendChild(pathWrap);
+  if(meetingKeys.length){
+    const legend = el(`<div class="path-legend"></div>`);
+    const ascKeys = Object.entries(S.fomcMeetings).sort((a,b)=> (a[1].meetingDate||a[1].meetingLabel||'').localeCompare(b[1].meetingDate||b[1].meetingLabel||'')).map(e=>e[0]);
+    ascKeys.forEach((k,idx)=>{
+      const on = S.fomcPathFilter[k]!==false;
+      legend.appendChild(el(`<div class="path-chip ${on?'':'off'}" data-pathfilter="${k}">
+        <span class="sw" style="background:${pathColor(idx)}"></span>${S.fomcMeetings[k].meetingLabel||k}</div>`));
+    });
+    body.appendChild(legend);
+  }
+
+  if(!f){
+    body.appendChild(el(`<div class="fomc-empty">아직 저장된 FOMC 회의가 없습니다. 위 버튼으로 SEP PDF를 업로드하면 표와 경로 차트가 채워집니다.</div>`));
+    return card;
+  }
+
+  body.appendChild(el(`<div class="fomc-sub">목표 시점별 전망</div>`));
+  const tbl = el(`<table class="fomc-table"><thead><tr>
+    <th>목표 시점</th><th>중간값(%)</th><th>중심경향 범위(%)</th><th>표수</th><th>해석</th></tr></thead><tbody></tbody></table>`);
+  const tbody = tbl.querySelector('tbody');
+  (f.years||[]).forEach((y,idx)=>{
+    tbody.appendChild(el(`<tr>
+      <td><input class="flabel-input" data-fyear="${idx}" data-ff="label" value="${y.label}"></td>
+      <td><input class="fin" data-fyear="${idx}" data-ff="median" value="${y.median??''}"></td>
+      <td><div style="display:flex;gap:4px;align-items:center">
+        <input class="fin" data-fyear="${idx}" data-ff="lo" value="${y.lo??''}" placeholder="−">
+        <span style="color:var(--faint)">~</span>
+        <input class="fin" data-fyear="${idx}" data-ff="hi" value="${y.hi??''}" placeholder="−"></div></td>
+      <td><input class="fin" style="width:46px" data-fyear="${idx}" data-ff="votes" value="${y.votes??''}"></td>
+      <td><input class="fnote" data-fyear="${idx}" data-ff="note" value="${y.note||''}"></td>
+    </tr>`));
+  });
+  body.appendChild(tbl);
+
+  body.appendChild(el(`<div class="fomc-sub">직전 회의 대비 전망 변화</div>`));
+  const tbl2 = el(`<table class="fomc-table"><thead><tr>
+    <th>목표 시점</th><th>이전 전망(%)</th><th>현재 전망(%)</th><th>해석</th></tr></thead><tbody></tbody></table>`);
+  const tbody2 = tbl2.querySelector('tbody');
+  (f.shifts||[]).forEach((s,idx)=>{
+    const d = (s.curr!=null && s.prev!=null) ? round(s.curr-s.prev,2) : null;
+    tbody2.appendChild(el(`<tr>
+      <td><input class="flabel-input" data-fshift="${idx}" data-sf="target" value="${s.target}"></td>
+      <td><input class="fin" data-fshift="${idx}" data-sf="prev" value="${s.prev??''}"></td>
+      <td><div style="display:flex;align-items:center;gap:4px"><input class="fin" data-fshift="${idx}" data-sf="curr" value="${s.curr??''}">
+        ${d!=null?`<span style="font-size:10px;color:${d>=0?'var(--sell)':'var(--buy)'}">${d>=0?'▲':'▼'}${Math.abs(d)}</span>`:''}</div></td>
+      <td><input class="fnote" data-fshift="${idx}" data-sf="note" value="${s.note||''}"></td>
+    </tr>`));
+  });
+  body.appendChild(tbl2);
+
+  body.appendChild(el(`<div class="fomc-sub">이번 회의 투표 분포${f.splitConfidence==='approx'?` <span class="confidence-tag">AI 추정 · 확인 권장</span>`:''}</div>`));
+  const total = (f.split||[]).reduce((a,s)=>a+(+s.count||0),0) || 1;
+  const colorMap={buy:'var(--buy)',neu:'var(--neu)',sell:'var(--sell)'};
+  const bar = el(`<div class="split-bar"></div>`);
+  (f.split||[]).forEach(s=>{
+    const w = (Math.max(+s.count||0,0)/total*100);
+    bar.appendChild(el(`<div class="split-seg" style="width:${w}%;background:${colorMap[s.sig]||'var(--faint)'}">${s.count>0?s.count+'명':''}</div>`));
+  });
+  body.appendChild(bar);
+  const rows = el(`<div class="split-rows"></div>`);
+  (f.split||[]).forEach((s,idx)=>{
+    rows.appendChild(el(`<div class="split-row">
+      <span class="swatch" style="background:${colorMap[s.sig]||'var(--faint)'}"></span>
+      <input class="flabel-input" style="width:110px" data-fsplit="${idx}" data-spf="label" value="${s.label}">
+      <input class="fin" data-fsplit="${idx}" data-spf="count" value="${s.count}">
+      <select class="sigsel small" style="width:auto" data-fsplit="${idx}" data-spf="sig">
+        <option value="buy" ${s.sig==='buy'?'selected':''}>매수성향</option>
+        <option value="neu" ${s.sig==='neu'?'selected':''}>중립</option>
+        <option value="sell" ${s.sig==='sell'?'selected':''}>매도성향</option>
+      </select>
+    </div>`));
+  });
+  body.appendChild(rows);
+
+  body.appendChild(el(`<div class="fomc-foot-label">
+    <span style="font-size:11px;color:var(--faint)">회의명</span><input data-fmeta="meetingLabel" value="${f.meetingLabel||''}">
+  </div>`));
+
+  if(f.mediaSynthesis || (f.media&&f.media.length)){
+    body.appendChild(el(`<div class="fomc-sub">회의 분석 · 매체 반응 요약${f.parsedAt?` <span style="color:var(--faint);font-weight:600;text-transform:none;letter-spacing:0">· ${f.parsedAt} AI 종합</span>`:''}</div>`));
+    if(f.mediaSynthesis) body.appendChild(el(`<div class="media-synth">${f.mediaSynthesis}</div>`));
+    if(f.media && f.media.length){
+      const mlist = el(`<div class="media-list"></div>`);
+      f.media.forEach(m=> mlist.appendChild(el(`<div class="media-item">
+        <span class="media-outlet">${m.outlet||'매체'}</span><span class="media-take">${m.take||''}</span></div>`)));
+      body.appendChild(mlist);
+    }
+    body.appendChild(el(`<div class="band-hint">AI가 PDF 발표일 기준으로 웹을 검색해 합성한 요약입니다. 실제 보도와 다를 수 있어 투자 판단은 원문 확인 후 내리시길 권장합니다.</div>`));
+  }
+
+  body.appendChild(el(`<div class="band-hint" style="margin-top:14px">이 카드는 매수·중립·매도 자동계산에 관여하지 않습니다 — 상단 우측에서 직접 고른 시그널만 'FOMC' 카테고리로 집계됩니다. 표 값은 발표 후 직접 업데이트하거나 PDF를 다시 업로드해 새 회의로 저장하세요.</div>`));
+
+  return card;
+}
+
+function render(){
+  const root = document.getElementById('app-root');
+  root.innerHTML='';
+  const wrap = el('<div class="wrap"></div>');
+
+  // ---- header ----
+  const ov = overall();
+  wrap.appendChild(el(`
+    <div class="top">
+      <div class="title-block">
+        <div class="eyebrow">Global Macro · Signal Cockpit</div>
+        <h1>경제지표 매매 시그널</h1>
+        <div class="sub">기준금리 <b class="mono">${S.baseRate.toFixed(2)}%</b> · 데이터 기준: ${S.asOf}${S.lastUpdate?` · 최근 갱신 ${S.lastUpdate}`:''}</div>
+      </div>
+      <div class="top-actions">
+        <button class="btn primary" id="ai-btn">⟳ FRED 공식 데이터 갱신</button>
+        <div class="status" id="status"></div>
+      </div>
+    </div>`));
+
+  // ---- hero ----
+  const hero = el('<div class="hero"></div>');
+  const pos = ((ov.score+1)/2*100).toFixed(1);
+  hero.appendChild(el(`
+    <div class="gauge">
+      <div class="gauge-head"><span class="lbl">종합 시장 스탠스</span>
+        <span class="score-num">가중 점수 <b class="mono">${ov.score>=0?'+':''}${ov.score.toFixed(2)}</b> <span style="color:var(--faint)">(−1 ~ +1)</span></span></div>
+      <div class="verdict" style="color:var(--${ov.cls==='s-buy'?'buy':ov.cls==='s-sell'?'sell':'neu'})">${ov.verdict}</div>
+      <div class="meter">
+        <div class="meter-track"></div>
+        <div class="needle" style="left:${pos}%"></div>
+        <div class="meter-ticks"><span>매도</span><span>중립</span><span>매수</span></div>
+      </div>
+      <div class="tally">
+        <div class="cell"><div class="n" style="color:var(--buy)">${ov.B}</div><div class="t">매수</div></div>
+        <div class="cell"><div class="n" style="color:var(--neu)">${ov.N}</div><div class="t">중립</div></div>
+        <div class="cell"><div class="n" style="color:var(--sell)">${ov.Se}</div><div class="t">매도</div></div>
+      </div>
+    </div>`));
+
+  const contrib = el('<div class="contrib"><div class="lbl">카테고리별 기여 (가중치 반영)</div></div>');
+  CATS.forEach(c=>{
+    const cs = catScore(c.key);
+    const sc = cs.score===null?0:cs.score;
+    const w = (Math.abs(sc)*50).toFixed(1);
+    const side = sc>=0?'left:50%':`right:${(100-50)}%;left:${(50+sc*50)}%`;
+    const color = sc>0.05?'var(--buy)':sc<-0.05?'var(--sell)':'var(--neu)';
+    const fillStyle = sc>=0 ? `left:50%;width:${w}%;background:${color}` : `left:${50+sc*50}%;width:${w}%;background:${color}`;
+    contrib.appendChild(el(`
+      <div class="crow">
+        <div><div class="cname">${c.name}</div><div class="cw">w ${S.weights[c.key]}</div></div>
+        <div class="cbar"><div class="cmid"></div><div class="cfill" style="${cs.score===null?'display:none':fillStyle}"></div></div>
+        <div class="cval mono">${cs.score===null?'—':(sc>=0?'+':'')+sc.toFixed(2)}</div>
+      </div>`));
+  });
+  hero.appendChild(contrib);
+  wrap.appendChild(hero);
+
+  // ---- settings (moved above FOMC) ----
+  const dr = el(`<div class="drawer ${S.settingsOpen?'open':''}">
+    <div class="drawer-head" id="dr-head"><span class="chev">▶</span><h3>⚙ 카테고리 가중치 · 설정</h3>
+      <span class="wtag mono">합계 ${Object.values(S.weights).reduce((a,b)=>a+b,0)}</span></div>
+    <div class="drawer-body"><div class="wgrid" id="wgrid"></div>
+      <div class="note">
+        종합 점수 = <code>Σ(카테고리 가중치 × 카테고리 평균시그널) ÷ Σ가중치</code>. 시그널은 매수 +1 / 중립 0 / 매도 −1.
+        <code>±0.33</code> 초과 시 매수·매도 우위로 판정합니다. 가중치는 숫자를 직접 입력하며, 합계가 100이 아니어도 비율대로 자동 정규화됩니다.
+        <br><br>각 지표의 <b>'기준선 편집'</b>을 펼치면 매수·중립·매도 구간을 직접 추가·삭제·수정할 수 있습니다. <b>'수동 재정의'</b>로는 자동계산 대신 직접 시그널을 지정할 수 있고(FRED 자동지표 포함), <b>'추세 보기'</b>에서는 지표명 옆 📅 아이콘으로 기간을 지정해 흐름을 볼 수 있습니다.
+        <br><br><b>FOMC</b> 카드는 자동 시그널 계산에 관여하지 않으며, 카드 우측 상단에서 직접 고른 매수/중립/매도/제외만 'FOMC' 카테고리로 집계됩니다.
+      </div>
+    </div></div>`);
+  wrap.appendChild(dr);
+
+  // ---- FOMC dot plot ----
+  wrap.appendChild(renderFomc());
+
+  // ---- categories (FOMC card handles its own category separately) ----
+  CATS.filter(c=>c.key!=='fomc').forEach(c=>{
+    const cs = catScore(c.key);
+    const badge = cs.score===null?{t:'데이터 없음',cl:'s-off'}:
+      cs.score>=0.33?{t:'매수',cl:'s-buy'}:cs.score<=-0.33?{t:'매도',cl:'s-sell'}:{t:'중립',cl:'s-neu'};
+    const cat = el(`<div class="cat ${S.open[c.key]?'open':''}" data-cat="${c.key}">
+      <div class="cat-head"><span class="chev">▶</span><h3>${c.name}</h3>
+        <span class="wtag mono">${cs.b}·${cs.nu}·${cs.s}</span>
+        <span class="badge ${badge.cl}">${badge.t}</span></div>
+      <div class="cat-body"></div></div>`);
+    const body = cat.querySelector('.cat-body');
+    INDICATORS.filter(i=>i.cat===c.key).forEach(i=> body.appendChild(indRow(i)));
+    wrap.appendChild(cat);
+  });
+
+  wrap.appendChild(el(`<footer>값을 클릭하면 직접 수정 · 모든 입력은 자동 저장됩니다 · 지표 이름을 클릭하면 출처 페이지가 새 탭으로 열립니다<br>
+    출처: FRED(세인트루이스 연준) · CNN F&G · GuruFocus · investing.com · 네이버 증권 · ICI — 투자 판단의 참고 자료이며 투자 권유가 아닙니다</footer>`));
+  root.appendChild(wrap);
+  bind();
+  // render weight inputs (수기 입력)
+  const wg = document.getElementById('wgrid');
+  CATS.forEach(c=>{
+    const cell = el(`<div class="wcell"><label>${c.name}</label>
+      <input type="number" class="wnum" min="0" max="100" step="1" value="${S.weights[c.key]}" data-w="${c.key}"></div>`);
+    wg.appendChild(cell);
+  });
+  document.querySelectorAll('[data-w]').forEach(r=>{
+    r.addEventListener('change',e=>{
+      const v = parseFloat(e.target.value); S.weights[e.target.dataset.w]= isNaN(v)?0:v; save(); render();
+    });
+    r.addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();});
+  });
+}
+
+function indRow(i){
+  const sig = indSignal(i);
+  const v = indValue(i);
+  const chg = S.chgs[i.key];
+  const chgHtml = (chg!=null && !isNaN(chg) && i.mode!=='derived') ?
+    `<span class="chg ${chg>=0?'up':'down'}">${chg>=0?'▲':'▼'} ${(Math.abs(chg)*100).toFixed(1)}%</span>` :
+    (i.mode==='derived'?`<span class="chg" style="color:var(--faint)">계산값</span>`:'');
+
+  const row = el(`<div class="ind"><div class="meta">
+      <div class="iname"><a class="iname-link" href="${i.src}" target="_blank" rel="noopener" title="${i.src} 새 탭에서 열기">${i.name}</a><span class="freq">${i.freq}</span><button class="cal-icon" data-trendtoggle="${i.key}" title="추세·기간 보기">📅</button></div>
+      <div class="idesc">${i.desc} · <a href="${i.src}" target="_blank" rel="noopener">출처</a></div>
+    </div><div class="right"></div></div>`);
+  const right = row.querySelector('.right');
+
+  // expect fields (수기 결/예) — 결과값은 숫자로 파싱되면 추세 차트용으로도 저장됩니다
+  if(i.expect){
+    const ex = S.expect[i.key]||{r:'',e:''};
+    const meta = row.querySelector('.meta');
+    const exDiv = el(`<div class="expect">
+      <input placeholder="결과(숫자)" value="${ex.r}" data-ex="${i.key}" data-f="r">
+      <span>/</span>
+      <input placeholder="예상" value="${ex.e}" data-ex="${i.key}" data-f="e"></div>`);
+    meta.appendChild(exDiv);
+  }
+
+  if(chgHtml) right.appendChild(el(chgHtml));
+
+  // value
+  if(i.mode!=='manual'){
+    const inp = el(`<input class="val-edit mono" data-v="${i.key}" value="${v==null?'':fmt(v)}" ${i.mode==='derived'?'disabled style="opacity:.7"':''}>`);
+    right.appendChild(inp);
+  }
+
+  // signal control
+  if(i.mode==='manual'){
+    const sel = el(`<select class="sigsel" data-sig="${i.key}">
+      <option value="buy" ${sig==='buy'?'selected':''}>매수</option>
+      <option value="neu" ${sig==='neu'?'selected':''}>중립</option>
+      <option value="sell" ${sig==='sell'?'selected':''}>매도</option>
+      <option value="off" ${sig==='off'?'selected':''}>제외</option></select>`);
+    right.appendChild(sel);
+  } else {
+    right.appendChild(el(`<span class="sigpill ${sigCls(sig)}">${sig==='off'?'제외':SIG[sig]}</span>`));
+  }
+
+  const fullRow = el(`<div class="ind-band-wrap"></div>`);
+  const toggleRow = el(`<div class="toggle-row"></div>`);
+  const isCustom = !!(S.customBands && S.customBands[i.key]);
+  const ov = S.manualOverride[i.key];
+
+  if(i.mode!=='manual'){
+    toggleRow.appendChild(el(`<button class="band-toggle" data-bandtoggle="${i.key}">${S.bandOpen[i.key]?'▾':'▸'} 기준선 편집${isCustom?' · 수정됨':''}</button>`));
+    toggleRow.appendChild(el(`<button class="band-toggle" data-overridetoggle="${i.key}">${S.bandOpen[i.key+'__ov']?'▾':'▸'} 수동 재정의${ov&&ov!=='auto'?' · 적용중':''}</button>`));
+  }
+  toggleRow.appendChild(el(`<button class="band-toggle" data-trendtoggle="${i.key}">${S.trendOpen[i.key]?'▾':'▸'} 추세 보기 ${(S.history[i.key]||[]).length?`(${S.history[i.key].length})`:''}</button>`));
+  fullRow.appendChild(toggleRow);
+
+  if(i.mode!=='manual' && S.bandOpen[i.key+'__ov']){
+    const panel = el(`<div class="band-editor"></div>`);
+    panel.appendChild(el(`<div class="override-row">
+      <span style="font-size:11px;color:var(--muted)">자동계산 대신 직접 시그널을 고정합니다:</span>
+      <select data-override="${i.key}">
+        <option value="auto" ${(!ov||ov==='auto')?'selected':''}>자동(계산값)</option>
+        <option value="buy" ${ov==='buy'?'selected':''}>매수</option>
+        <option value="neu" ${ov==='neu'?'selected':''}>중립</option>
+        <option value="sell" ${ov==='sell'?'selected':''}>매도</option>
+        <option value="off" ${ov==='off'?'selected':''}>제외</option>
+      </select>
+      ${ov&&ov!=='auto'?`<span class="override-tag">수동 적용중</span>`:''}
+    </div>`));
+    fullRow.appendChild(panel);
+  }
+
+  if(S.trendOpen[i.key]){
+    const tpanel = el(`<div class="trend-panel"></div>`);
+    const range = S.trendRange[i.key]||{};
+    const rangeRow = el(`<div class="range-row">
+      <span>기간</span>
+      <input type="date" data-trendfrom="${i.key}" value="${range.from||''}">
+      <span>~</span>
+      <input type="date" data-trendto="${i.key}" value="${range.to||''}">
+      <button class="btn ghost" data-trendreset="${i.key}">전체 기간</button>
+    </div>`);
+    tpanel.appendChild(rangeRow);
+    const chartDiv = el(`<div></div>`);
+    chartDiv.innerHTML = buildTrendChart(i);
+    tpanel.appendChild(chartDiv);
+    fullRow.appendChild(tpanel);
+  }
+
+  if(i.mode!=='manual' && S.bandOpen[i.key]){
+    const bands = getBands(i);
+    const scale = bandScale(i);
+    const curVal = i.mode==='change' ? S.chgs[i.key] : indValue(i);
+    const editor = el(`<div class="band-editor"></div>`);
+    editor.appendChild(el(`<div class="band-editor-head"><span>기준 구간 ${i.unit?`(${i.unit}${i.mode==='change'?' · 전월/전주比 %':''})`:(i.mode==='change'?'(전월/전주比 %)':'')}</span>${isCustom?`<button class="btn ghost" data-reset="${i.key}">기본값 복원</button>`:''}</div>`));
+    const rowsDiv = el(`<div></div>`);
+    if(!bands.length){ rowsDiv.appendChild(el(`<div class="band-hint">설정된 구간이 없습니다 — 아래에서 추가하면 이 지표가 시그널 집계에 포함됩니다.</div>`)); }
+    bands.forEach((b,idx)=>{
+      const minD = (b.min===null||b.min===undefined)? '' : round(b.min*scale,4);
+      const maxD = (b.max===null||b.max===undefined)? '' : round(b.max*scale,4);
+      const active = (curVal!=null && !isNaN(curVal)) && (b.min===null||b.min===undefined||curVal>=b.min) && (b.max===null||b.max===undefined||curVal<b.max);
+      rowsDiv.appendChild(el(`<div class="band-row ${active?'active':''}" data-bkey="${i.key}" data-bidx="${idx}">
+        <input class="band-input" data-bfield="min" placeholder="−∞" value="${minD}">
+        <span class="tilde">~</span>
+        <input class="band-input" data-bfield="max" placeholder="+∞" value="${maxD}">
+        <span class="tilde">→</span>
+        <select class="sigsel small" data-bfield="sig">
+          <option value="buy" ${b.sig==='buy'?'selected':''}>매수</option>
+          <option value="neu" ${b.sig==='neu'?'selected':''}>중립</option>
+          <option value="sell" ${b.sig==='sell'?'selected':''}>매도</option>
+        </select>
+        <button class="band-del" data-bdel="${idx}" title="구간 삭제">✕</button>
+      </div>`));
+    });
+    editor.appendChild(rowsDiv);
+    editor.appendChild(el(`<button class="band-add" data-addband="${i.key}">+ 구간 추가</button>`));
+    editor.appendChild(el(`<div class="band-hint">최소값을 비우면 −∞, 최대값을 비우면 +∞로 적용됩니다 (최소 이상 ~ 최대 미만). 예: 60~70 칸에 매수, 70 이상 칸에 매도.</div>`));
+    fullRow.appendChild(editor);
+  }
+
+  row.appendChild(fullRow);
+  return row;
+}
+
+//============================ BIND ============================//
+function bind(){
+  document.getElementById('dr-head').onclick=()=>{S.settingsOpen=!S.settingsOpen;save();render();};
+  document.querySelectorAll('.cat-head').forEach(h=> h.onclick=()=>{
+    const k=h.parentElement.dataset.cat; S.open[k]=!S.open[k]; save(); render();
+  });
+  document.querySelectorAll('[data-v]').forEach(inp=>{
+    inp.addEventListener('change',e=>{
+      const k=e.target.dataset.v; const raw=e.target.value.replace(/,/g,'').trim();
+      S.vals[k]= raw===''?null:parseFloat(raw); save(); render();
+    });
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();});
+  });
+  document.querySelectorAll('[data-sig]').forEach(sel=> sel.onchange=e=>{
+    S.manual[e.target.dataset.sig]=e.target.value; save(); render();
+  });
+  document.querySelectorAll('[data-ex]').forEach(inp=> inp.addEventListener('change',e=>{
+    const k=e.target.dataset.ex,f=e.target.dataset.f;
+    if(!S.expect[k])S.expect[k]={r:'',e:''}; S.expect[k][f]=e.target.value;
+    if(f==='r'){
+      const num = parseFloat(e.target.value.replace(/,/g,'').trim());
+      S.vals[k] = isNaN(num) ? null : num;
+    }
+    save(); render();
+  }));
+  document.getElementById('ai-btn').onclick = aiUpdate;
+
+  // threshold (band) editor
+  document.querySelectorAll('[data-bandtoggle]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.bandtoggle; S.bandOpen[k]=!S.bandOpen[k]; save(); render();
+  });
+  document.querySelectorAll('[data-addband]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.addband; const arr=ensureCustom(k);
+    const last = arr[arr.length-1];
+    const newMin = last ? (last.max!==null && last.max!==undefined ? last.max : (last.min!==null&&last.min!==undefined?last.min:0)) : 0;
+    arr.push({min:newMin, max:null, sig:'neu'});
+    save(); render();
+  });
+  document.querySelectorAll('[data-bdel]').forEach(b=> b.onclick=()=>{
+    const rowEl=b.closest('.band-row'); const k=rowEl.dataset.bkey; const idx=+rowEl.dataset.bidx;
+    const arr=ensureCustom(k); arr.splice(idx,1); save(); render();
+  });
+  document.querySelectorAll('[data-reset]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.reset; delete S.customBands[k]; save(); render();
+  });
+  document.querySelectorAll('.band-row [data-bfield]').forEach(inp=> inp.addEventListener('change',e=>{
+    const rowEl=e.target.closest('.band-row'); const k=rowEl.dataset.bkey; const idx=+rowEl.dataset.bidx;
+    const field=e.target.dataset.bfield; const arr=ensureCustom(k);
+    if(field==='sig'){ arr[idx].sig = e.target.value; }
+    else{
+      const raw=e.target.value.trim(); let num = raw===''?null:parseFloat(raw.replace(/,/g,''));
+      if(num!==null && !isNaN(num)){ const ind=INDICATORS.find(x=>x.key===k); num = num/bandScale(ind); }
+      else num = null;
+      arr[idx][field]=num;
+    }
+    arr.sort((a,b)=>{ const am=a.min===null||a.min===undefined?-Infinity:a.min, bm=b.min===null||b.min===undefined?-Infinity:b.min; return am-bm; });
+    save(); render();
+  }));
+
+  // trend chart toggle
+  document.querySelectorAll('[data-trendtoggle]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.trendtoggle; S.trendOpen[k]=!S.trendOpen[k]; save(); render();
+  });
+  document.querySelectorAll('[data-trendfrom]').forEach(inp=> inp.addEventListener('change',e=>{
+    const k=e.target.dataset.trendfrom; if(!S.trendRange[k])S.trendRange[k]={};
+    S.trendRange[k].from = e.target.value||undefined; save(); render();
+  }));
+  document.querySelectorAll('[data-trendto]').forEach(inp=> inp.addEventListener('change',e=>{
+    const k=e.target.dataset.trendto; if(!S.trendRange[k])S.trendRange[k]={};
+    S.trendRange[k].to = e.target.value||undefined; save(); render();
+  }));
+  document.querySelectorAll('[data-trendreset]').forEach(b=> b.onclick=()=>{
+    delete S.trendRange[b.dataset.trendreset]; save(); render();
+  });
+
+  // manual override (수동 재정의)
+  document.querySelectorAll('[data-overridetoggle]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.overridetoggle; S.bandOpen[k+'__ov']=!S.bandOpen[k+'__ov']; save(); render();
+  });
+  document.querySelectorAll('[data-override]').forEach(sel=> sel.onchange=e=>{
+    const k=e.target.dataset.override; S.manualOverride[k]=e.target.value; save(); render();
+  });
+
+  // FOMC dot plot
+  const fomcHead = document.getElementById('fomc-head');
+  if(fomcHead) fomcHead.onclick=(e)=>{ if(e.target.closest('select')) return; S.fomcOpen=!S.fomcOpen; save(); render(); };
+  document.querySelectorAll('[data-fyear]').forEach(inp=> inp.addEventListener('change',e=>{
+    const idx=+e.target.dataset.fyear; const f=e.target.dataset.ff;
+    const m=S.fomcMeetings[S.fomcActiveKey]; if(!m) return; const y=m.years[idx];
+    if(f==='label'||f==='note'){ y[f]=e.target.value; }
+    else{ const raw=e.target.value.trim(); y[f]= raw===''?null:parseFloat(raw); }
+    save(); render();
+  }));
+  document.querySelectorAll('[data-fshift]').forEach(inp=> inp.addEventListener('change',e=>{
+    const idx=+e.target.dataset.fshift; const f=e.target.dataset.sf;
+    const m=S.fomcMeetings[S.fomcActiveKey]; if(!m) return; const s=m.shifts[idx];
+    if(f==='target'||f==='note'){ s[f]=e.target.value; }
+    else{ const raw=e.target.value.trim(); s[f]= raw===''?null:parseFloat(raw); }
+    save(); render();
+  }));
+  document.querySelectorAll('[data-fsplit]').forEach(inp=> inp.addEventListener('change',e=>{
+    const idx=+e.target.dataset.fsplit; const f=e.target.dataset.spf;
+    const m=S.fomcMeetings[S.fomcActiveKey]; if(!m) return; const s=m.split[idx];
+    if(f==='label'||f==='sig'){ s[f]=e.target.value; }
+    else{ const raw=e.target.value.trim(); s[f]= raw===''?0:parseFloat(raw); }
+    save(); render();
+  }));
+  document.querySelectorAll('[data-fmeta]').forEach(inp=> inp.addEventListener('change',e=>{
+    const m=S.fomcMeetings[S.fomcActiveKey]; if(!m) return;
+    m[e.target.dataset.fmeta]=e.target.value; save(); render();
+  }));
+  const fomcSelect = document.getElementById('fomc-meeting-select');
+  if(fomcSelect) fomcSelect.onchange = e=>{ S.fomcActiveKey = e.target.value; save(); render(); };
+  document.querySelectorAll('[data-pathfilter]').forEach(chip=> chip.onclick=()=>{
+    const k = chip.dataset.pathfilter;
+    S.fomcPathFilter[k] = !(S.fomcPathFilter[k]!==false);
+    save(); render();
+  });
+  document.querySelectorAll('.fin,.fnote,.flabel-input,.fomc-foot-label input').forEach(inp=>
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();}));
+
+  const fomcPasteBtn = document.getElementById('fomc-paste-btn');
+  const fomcPasteInput = document.getElementById('fomc-paste-input');
+  if(fomcPasteBtn && fomcPasteInput){
+    fomcPasteBtn.onclick = ()=> handleFomcPaste(fomcPasteInput.value);
+  }
+}
+
+//============================ LIVE UPDATE (FRED 공식 API, AI 미사용) ============================//
+function setStatus(html){ document.getElementById('status').innerHTML=html; }
+function toast(msg){ const t=el(`<div class="toast">${msg}</div>`); document.body.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add('show'));
+  setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),400);},2600); }
+
+// FRED 키 -> 대시보드 키 매핑 (base_rate만 S.baseRate로, 나머지는 S.vals/S.chgs로)
+const FRED_KEY_MAP = {
+  base_rate:'baseRate', dgs2:'dgs2', dgs10:'dgs10', dgs30:'dgs30', t10y2y:'t10y2y',
+  wti:'wti', brent:'brent', hyspread:'hyspread', m2:'m2', walcl:'walcl', tga:'tga', rrp:'rrp'
+};
+
+async function aiUpdate(){
+  const btn=document.getElementById('ai-btn'); btn.disabled=true;
+  setStatus('<span class="spin"></span> FRED(세인트루이스 연은) 공식 데이터 수집 중…');
+  try{
+    const resp = await fetch('/api/fred-data');
+    if(!resp.ok) throw new Error('http-'+resp.status);
+    const payload = await resp.json();
+    const j = payload.data || {};
+    let n=0;
+    for(const [k,info] of Object.entries(j)){
+      if(!info || info.value==null || isNaN(info.value)) continue;
+      const target = FRED_KEY_MAP[k]; if(!target) continue;
+      if(target==='baseRate'){ S.baseRate=+info.value; }
+      else {
+        S.vals[target]=+info.value;
+        if(info.chg!=null && !isNaN(info.chg)) S.chgs[target]=+info.chg;
+      }
+      n++;
+    }
+    const now=new Date(); S.lastUpdate=`${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    S.asOf='FRED 공식 데이터 (세인트루이스 연은)';
+    save(); render();
+    const failCount = (payload.errors||[]).length;
+    toast(n>0?`✓ ${n}개 지표 갱신 완료${failCount?` (${failCount}개 실패)`:''}`:'갱신된 값이 없습니다. 잠시 후 다시 시도해 주세요');
+    if(failCount) console.warn('FRED fetch errors:', payload.errors);
+  }catch(e){
+    setStatus('<span class="dot" style="background:var(--sell)"></span> 자동 갱신 실패 — 값을 직접 입력하거나 잠시 후 다시 시도하세요');
+    toast('자동 갱신에 실패했습니다');
+  }finally{
+    const btn2=document.getElementById('ai-btn'); if(btn2) btn2.disabled=false;
+  }
+}
+
+//============================ FOMC 분석 결과 붙여넣기 (네트워크 호출 없음) ============================//
+function fomcStatus(html){ const el2=document.getElementById('fomc-pdf-status'); if(el2) el2.innerHTML=html; }
+
+function handleFomcPaste(rawText){
+  const btn=document.getElementById('fomc-paste-btn'); if(btn) btn.disabled=true;
+  try{
+    if(!rawText || !rawText.trim()) throw new Error('empty');
+    const m = rawText.match(/\{[\s\S]*\}/);
+    if(!m) throw new Error('no-json');
+    const j = JSON.parse(m[0]);
+
+    const years = Array.isArray(j.years) ? j.years.map(y=>({
+      label:y.label||'', median:(y.median!=null&&!isNaN(y.median))?+y.median:null,
+      lo:(y.lo!=null&&!isNaN(y.lo))?+y.lo:null, hi:(y.hi!=null&&!isNaN(y.hi))?+y.hi:null,
+      votes:(y.votes!=null&&!isNaN(y.votes))?+y.votes:null, note:y.note||''
+    })) : [];
+    const shifts = Array.isArray(j.shifts) ? j.shifts.map(s=>({
+      target:s.target||'', prev:(s.prev!=null&&!isNaN(s.prev))?+s.prev:null,
+      curr:(s.curr!=null&&!isNaN(s.curr))?+s.curr:null, note:s.note||''
+    })) : [];
+    const split = Array.isArray(j.split) ? j.split.map(s=>({
+      label:s.label||'', count:(s.count!=null&&!isNaN(s.count))?+s.count:0, sig:['buy','neu','sell'].includes(s.sig)?s.sig:'neu'
+    })) : [];
+    if(!years.length) throw new Error('no-years-parsed');
+
+    const now=new Date();
+    const parsedAt = `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const meetingDate = (typeof j.meetingDate==='string' && /^\d{4}-\d{2}/.test(j.meetingDate)) ? j.meetingDate : null;
+    const mKey = meetingDate ? meetingDate.slice(0,7) : ('m'+Date.now());
+
+    S.fomcMeetings[mKey] = {
+      meetingLabel: j.meetingLabel || mKey,
+      meetingDate,
+      years, shifts, split,
+      splitConfidence: j.splitConfidence || 'approx',
+      media: Array.isArray(j.media) ? j.media.filter(m2=>m2&&m2.take).slice(0,8) : [],
+      mediaSynthesis: j.mediaSynthesis || '',
+      parsedAt,
+    };
+    S.fomcActiveKey = mKey;
+    S.fomcPathFilter[mKey] = true;
+    save(); render();
+    toast('✓ FOMC 분석 결과 저장 완료 — 새 회의로 추가되었습니다');
+  }catch(e){
+    fomcStatus('<span class="dot" style="background:var(--sell)"></span> 저장 실패 — JSON 형식을 확인해 주세요 (README의 형식 참고)');
+    toast('FOMC 분석 결과 저장에 실패했습니다');
+  }finally{
+    const btn2=document.getElementById('fomc-paste-btn'); if(btn2) btn2.disabled=false;
+  }
+}
+
+//============================ INIT ============================//
+(async function(){ await load(); snapshotToday(); render(); save(); })();
+</script>
+</body>
+</html>
