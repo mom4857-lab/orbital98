@@ -127,6 +127,8 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
 .ex-compare b{color:var(--ink)}
 .ex-tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--panel-2);
   color:var(--accent);border:1px solid var(--border)}
+.ex-rightval{font-size:11px;line-height:1.5;color:var(--muted);text-align:right;white-space:nowrap}
+.ex-rightval b{color:var(--ink)}
 
 /* threshold editor */
 .ind-band-wrap{grid-column:1/-1;margin-top:2px}
@@ -158,8 +160,8 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
 
 /* trend chart */
 .toggle-row{display:flex;gap:16px;flex-wrap:wrap}
-.trend-panel{margin-top:8px;padding:14px;border:1px dashed var(--border);border-radius:12px;background:var(--panel-2)}
-.trend-svg{width:100%;height:150px;display:block}
+.trend-panel{margin-top:8px;padding:18px;border:1px dashed var(--border);border-radius:12px;background:var(--panel-2)}
+.trend-svg{width:100%;height:240px;display:block}
 .trend-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px;font-weight:600}
 .trend-empty{font-size:11.5px;color:var(--faint);line-height:1.6;padding:8px 2px}
 .freq-row{display:flex;gap:6px;margin-bottom:10px}
@@ -171,10 +173,13 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
   background:var(--panel);color:var(--accent);cursor:pointer;font-weight:700;font-family:inherit}
 .exsave-btn:hover{border-color:var(--accent);background:var(--accent-bg)}
 .expect input[type=date]{width:118px}
-.hist-list{margin-top:12px;border-top:1px dashed var(--border);padding-top:10px;max-height:220px;overflow-y:auto}
-.hist-list-head{font-size:10.5px;color:var(--faint);font-weight:700;margin-bottom:7px;letter-spacing:.02em}
+.hist-list{margin-top:12px;border-top:1px dashed var(--border);padding-top:10px;max-height:260px;overflow-y:auto}
+.hist-list-head{font-size:10.5px;color:var(--faint);font-weight:700;margin-bottom:7px;letter-spacing:.02em;overflow:hidden}
 .hist-row{display:flex;align-items:center;gap:8px;padding:4px 3px;border-radius:7px}
 .hist-row:hover{background:var(--panel)}
+.hist-list-collapsed{margin-top:12px;border-top:1px dashed var(--border);padding-top:10px}
+.hist-list-toggle{background:none;border:none;color:var(--accent);cursor:pointer;font-size:11px;font-weight:700;padding:2px 0}
+.hist-list-toggle:hover{text-decoration:underline}
 .hist-date{font-size:11px;color:var(--muted);width:84px;flex-shrink:0;font-family:'JetBrains Mono',monospace}
 .hist-val{flex:1;min-width:0;font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--panel);
   border:1px solid var(--border);border-radius:7px;color:var(--ink);padding:5px 8px}
@@ -566,7 +571,7 @@ async function queryTrend(key){
 
 let __trendSeq = 0;
 function renderTrendSVG(hist, i){
-  const W=680,H=200,padL=60,padR=20,padT=20,padB=30;
+  const W=680,H=240,padL=60,padR=20,padT=22,padB=34;
   const innerW=W-padL-padR, innerH=H-padT-padB;
   // 전월/전주比(%) 기준 구간은 레벨값 그래프와 척도가 달라 표시하지 않음
   const showBands = i.mode!=='change';
@@ -578,7 +583,8 @@ function renderTrendSVG(hist, i){
   const pad=(hi-lo)*0.18||1; lo-=pad; hi+=pad;
   const xAt = idx => padL + (hist.length===1?innerW/2:idx/(hist.length-1)*innerW);
   const yAt = val => padT + innerH - ((val-lo)/(hi-lo))*innerH;
-  const bandColor = {buy:'var(--buy)', neu:'var(--neu)', sell:'var(--sell)'};
+  // 추세보기 전용 색상: 매수=빨강, 중립=주황, 매도=초록 (전역 매수/매도 색상과는 별개)
+  const bandColor = {buy:'#E5484D', neu:'#E3A93C', sell:'#34C77B'};
   let bandsSvg='';
   bands.forEach(b=>{
     const bmin = (b.min==null)? lo : Math.max(b.min,lo);
@@ -619,9 +625,14 @@ function renderTrendSVG(hist, i){
   <div class="trend-meta"><span>${hist.length}개 기록${unit?` · 단위 ${unit}`:''}</span><span style="color:${trendColor}">${delta>=0?'▲':'▼'} ${Math.abs(round(delta,3))}${unit} (선택 기간 변화)</span></div>`;
 }
 
+let HIST_LIST_OPEN = {};
 function histEditableList(i){
   const arr = (S.history[i.key]||[]).filter(p=>p.v!=null && !isNaN(p.v)).slice().sort((a,b)=> b.t.localeCompare(a.t));
   if(!arr.length) return '';
+  const isOpen = !!HIST_LIST_OPEN[i.key];
+  if(!isOpen){
+    return `<div class="hist-list-collapsed"><button class="hist-list-toggle" data-histlisttoggle="${i.key}">▼ 저장된 기록 ${arr.length}개 보기 (수정·삭제)</button></div>`;
+  }
   const shown = arr.slice(0,30);
   const rows = shown.map(p=>`
     <div class="hist-row">
@@ -630,7 +641,8 @@ function histEditableList(i){
       <span class="hist-unit">${i.unit||''}</span>
       <button class="hist-del" data-histdel="${i.key}" data-histdate="${p.t}" title="이 기록 삭제">✕</button>
     </div>`).join('');
-  return `<div class="hist-list"><div class="hist-list-head">저장된 기록 ${arr.length}개${arr.length>30?' 중 최근 30개 표시 · 값을 바로 클릭해 수정 가능':' · 값을 바로 클릭해 수정 가능'}</div>${rows}</div>`;
+  return `<div class="hist-list"><div class="hist-list-head">저장된 기록 ${arr.length}개${arr.length>30?' 중 최근 30개 표시':''} · 값을 바로 클릭해 수정 가능
+    <button class="hist-list-toggle" data-histlisttoggle="${i.key}" style="float:right">▲ 접기</button></div>${rows}</div>`;
 }
 
 function buildTrendChart(i){
@@ -979,13 +991,19 @@ function indRow(i){
       <input placeholder="예상" value="${ex.e}" data-ex="${i.key}" data-f="e">
       <button class="exsave-btn" data-exsave="${i.key}" title="지정한 날짜로 추세 기록에 저장">저장</button></div>`);
     meta.appendChild(exDiv);
-    // 결과·예상이 둘 다 숫자로 입력됐으면 한눈에 비교할 수 있게 같이 표시
+    // 결과·예상 중 하나라도 입력됐으면 한눈에 비교할 수 있게 같이 표시 (메타 영역 + 대시보드 값 칸 둘 다)
     const rNum = parseFloat(String(ex.r).replace(/,/g,'').trim());
     const eNum = parseFloat(String(ex.e).replace(/,/g,'').trim());
-    if(!isNaN(rNum) && !isNaN(eNum)){
-      const diff = round(rNum-eNum,3);
-      const tagTxt = diff>0? `예상 상회 (+${diff}${i.unit})` : diff<0? `예상 하회 (${diff}${i.unit})` : '예상 부합';
-      meta.appendChild(el(`<div class="ex-compare">결과 <b class="mono">${ex.r}${i.unit}</b> / 예상 <b class="mono">${ex.e}${i.unit}</b><span class="ex-tag">${tagTxt}</span></div>`));
+    const rTxt = isNaN(rNum) ? '—' : `${ex.r}${i.unit}`;
+    const eTxt = isNaN(eNum) ? '—' : `${ex.e}${i.unit}`;
+    if(!isNaN(rNum) || !isNaN(eNum)){
+      let tagTxt = '';
+      if(!isNaN(rNum) && !isNaN(eNum)){
+        const diff = round(rNum-eNum,3);
+        tagTxt = diff>0? `예상 상회 (+${diff}${i.unit})` : diff<0? `예상 하회 (${diff}${i.unit})` : '예상 부합';
+      }
+      meta.appendChild(el(`<div class="ex-compare">결과 <b class="mono">${rTxt}</b> / 예상 <b class="mono">${eTxt}</b>${tagTxt?`<span class="ex-tag">${tagTxt}</span>`:''}</div>`));
+      right.appendChild(el(`<div class="ex-rightval mono">결과 <b>${rTxt}</b><br>예상 <b>${eTxt}</b></div>`));
     }
   }
 
@@ -1154,6 +1172,11 @@ function bind(){
     arr[idx].v = num; save(); render();
     toast(`✓ ${d} 기록 수정 완료`);
   }));
+  document.querySelectorAll('[data-histlisttoggle]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.histlisttoggle;
+    HIST_LIST_OPEN[k] = !HIST_LIST_OPEN[k];
+    render();
+  });
   document.querySelectorAll('[data-histdel]').forEach(b=> b.onclick=()=>{
     const k=b.dataset.histdel, d=b.dataset.histdate;
     const arr = S.history[k]; if(!arr) return;
