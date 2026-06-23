@@ -184,7 +184,10 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
 .hist-val{flex:1;min-width:0;font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--panel);
   border:1px solid var(--border);border-radius:7px;color:var(--ink);padding:5px 8px}
 .hist-val:focus{outline:none;border-color:var(--accent)}
-.hist-unit{font-size:10.5px;color:var(--faint);width:44px;flex-shrink:0}
+.hist-unit{font-size:10.5px;color:var(--faint);width:30px;flex-shrink:0}
+.hist-rlabel{font-size:10px;color:var(--faint);flex-shrink:0}
+.hist-expect{font-size:11px;color:var(--muted);flex-shrink:0;white-space:nowrap;padding-left:6px;border-left:1px solid var(--border)}
+.hist-expect b{color:var(--ink)}
 .hist-del{background:none;border:none;color:var(--faint);cursor:pointer;font-size:13px;padding:4px 7px;
   border-radius:6px;flex-shrink:0;line-height:1}
 .hist-del:hover{color:var(--sell);background:var(--sell-bg)}
@@ -634,13 +637,18 @@ function histEditableList(i){
     return `<div class="hist-list-collapsed"><button class="hist-list-toggle" data-histlisttoggle="${i.key}">▼ 저장된 기록 ${arr.length}개 보기 (수정·삭제)</button></div>`;
   }
   const shown = arr.slice(0,30);
-  const rows = shown.map(p=>`
-    <div class="hist-row">
+  const hasExpect = !!i.expect;
+  const rows = shown.map(p=>{
+    const eTxt = (hasExpect && p.e!=null && !isNaN(p.e)) ? `<span class="hist-expect" title="예상치">예상 <b class="mono">${p.e}${i.unit||''}</b></span>` : (hasExpect ? `<span class="hist-expect" style="color:var(--faint)">예상 —</span>` : '');
+    return `<div class="hist-row">
       <span class="hist-date">${p.t}</span>
+      <span class="hist-rlabel">결과</span>
       <input class="hist-val mono" type="text" inputmode="decimal" value="${p.v}" data-histedit="${i.key}" data-histdate="${p.t}">
       <span class="hist-unit">${i.unit||''}</span>
+      ${eTxt}
       <button class="hist-del" data-histdel="${i.key}" data-histdate="${p.t}" title="이 기록 삭제">✕</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   return `<div class="hist-list"><div class="hist-list-head">저장된 기록 ${arr.length}개${arr.length>30?' 중 최근 30개 표시':''} · 값을 바로 클릭해 수정 가능
     <button class="hist-list-toggle" data-histlisttoggle="${i.key}" style="float:right">▲ 접기</button></div>${rows}</div>`;
 }
@@ -1154,8 +1162,11 @@ function bind(){
     const t = ex.d || todayStr();
     if(!S.history[k]) S.history[k]=[];
     const arr = S.history[k];
+    const eNum = parseFloat(String(ex.e).replace(/,/g,'').trim());
+    const point = {t, v:num};
+    if(!isNaN(eNum)) point.e = eNum;
     const idx = arr.findIndex(p=>p.t===t);
-    if(idx>=0) arr[idx].v=num; else arr.push({t,v:num});
+    if(idx>=0) arr[idx]={...arr[idx], ...point}; else arr.push(point);
     arr.sort((a,b)=>a.t.localeCompare(b.t));
     if(arr.length>365) arr.splice(0, arr.length-365);
     save(); render();
