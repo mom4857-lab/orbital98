@@ -405,9 +405,9 @@ const INDICATORS = [
   {key:'rrp', cat:'liq', name:'역레포(RRP)', unit:'십억$', freq:'월1회', mode:'change', val:3.998, chg:1.608,
    src:FRED('RRPONTSYD'), desc:'감소=자금 시장유입(매수) / 증가=위험회피(매도)',
    bands:[{min:null,max:-0.001,sig:'buy'},{min:-0.001,max:0.001,sig:'neu'},{min:0.001,max:null,sig:'sell'}]},
-  {key:'mmf', cat:'liq', name:'MMF 잔액', unit:'조$', freq:'주1회', mode:'change', val:7.873, chg:-0.003,
-   src:'https://www.ici.org/research/stats/mmf', desc:'감소=대기자금 증시유입(매수) / 급증=리스크회피(매도)',
-   bands:[{min:null,max:-0.001,sig:'buy'},{min:-0.001,max:0.001,sig:'neu'},{min:0.001,max:null,sig:'sell'}]},
+  {key:'mmf', cat:'liq', name:'MMF 잔액', unit:'조$', freq:'주1회', mode:'band', manualEntry:true, val:6.8,
+   src:'https://www.ici.org/research/stats/mmf', desc:'ICI 발표. 감소추세=대기자금 증시유입(매수) / 5.5↓ 매수 / 5.5~7 중립 / 7↑ 리스크회피(매도)',
+   bands:[{min:null,max:5.5,sig:'buy'},{min:5.5,max:7.0,sig:'neu'},{min:7.0,max:null,sig:'sell'}]},
 
   // 고용 (수기)
   {key:'nfp', cat:'job', name:'비농업 고용', unit:'K', freq:'월1회', mode:'manual', val:null, manual:'sell',
@@ -418,25 +418,25 @@ const INDICATORS = [
    src:'https://kr.investing.com/economic-calendar/initial-jobless-claims-294', desc:'증가=해고↑ 둔화신호 / 감소=노동시장 안정', expect:true},
 
   // 환율
-  {key:'dxy', cat:'fx', name:'달러 인덱스', unit:'', freq:'매일', mode:'band', val:98.908, chg:0.009,
+  {key:'dxy', cat:'fx', name:'달러 인덱스', unit:'', freq:'매일', mode:'band', manualEntry:true, val:98.9,
    src:'https://stock.naver.com/marketindex/exchange/.DXY/price', desc:'<95 신흥국·국장(매수) / 95~105 균형 / 105↑ 시스템리스크(매도)',
    bands:[{min:null,max:95,sig:'buy'},{min:95,max:105,sig:'neu'},{min:105,max:null,sig:'sell'}]},
-  {key:'usdkrw', cat:'fx', name:'원/달러', unit:'₩', freq:'매일', mode:'band', val:1507.5, chg:0.022,
+  {key:'usdkrw', cat:'fx', name:'원/달러', unit:'₩', freq:'매일', mode:'band', manualEntry:true, val:1380,
    src:'https://m.stock.naver.com/marketindex/exchange/FX_USDKRW', desc:'고환율 = 외국인 환차손 매도세 심화 위험',
    bands:[{min:null,max:1300,sig:'buy'},{min:1300,max:1450,sig:'neu'},{min:1450,max:null,sig:'sell'}]},
 
   // 심리
-  {key:'fg', cat:'sent', name:'공포탐욕지수', unit:'', freq:'매일', mode:'band', val:34, chg:null,
+  {key:'fg', cat:'sent', name:'공포탐욕지수', unit:'', freq:'매일', mode:'band', manualEntry:true, val:50,
    src:'https://edition.cnn.com/markets/fear-and-greed', desc:'역발상: <45 공포(기회·매수) / 45~70 중립 / 70↑ 탐욕(매도)',
    bands:[{min:null,max:45,sig:'buy'},{min:45,max:70,sig:'neu'},{min:70,max:null,sig:'sell'}]},
   {key:'hyspread', cat:'sent', name:'하이일드 스프레드', unit:'%', freq:'매일', mode:'band', val:2.76, chg:0.007,
    src:FRED('BAMLH0A0HYM2'), desc:'3%↓ 유동성장세(매수) / 3~5% 중립 / 5%↑ 부도위험(매도)',
    bands:[{min:null,max:3,sig:'buy'},{min:3,max:5,sig:'neu'},{min:5,max:null,sig:'sell'}]},
-  {key:'shiller', cat:'sent', name:'쉴러 PER (S&P)', unit:'', freq:'월1회', mode:'band', val:39.8, chg:-0.009,
-   src:'https://www.gurufocus.com/economic_indicators/56/shiller-pe', desc:'20~30 적정(매수) / 30~40 중립 / 40↑ 역사적 고점(매도)',
+  {key:'shiller', cat:'sent', name:'쉴러 PER (S&P)', unit:'', freq:'월1회', mode:'band', manualEntry:true, val:36,
+   src:'https://www.gurufocus.com/economic_indicators/56/shiller-pe', desc:'20~30 저평가(매수) / 30~40 중립 / 40↑ 역사적 고점(매도)',
    bands:[{min:null,max:30,sig:'buy'},{min:30,max:40,sig:'neu'},{min:40,max:null,sig:'sell'}]},
-  {key:'retail', cat:'sent', name:'소매 판매', unit:'%', freq:'월1회', mode:'band', val:0, chg:null,
-   src:'https://kr.investing.com/economic-calendar/retail-sales-256', desc:'예측 대비 증감. 예상 상회 → 경기 긍정(매수)',
+  {key:'retail', cat:'sent', name:'소매 판매(MoM%)', unit:'%', freq:'월1회', mode:'band', manualEntry:true, val:0,
+   src:'https://kr.investing.com/economic-calendar/retail-sales-256', desc:'전월대비 증감. 예상 상회 → 소비·경기 긍정(매수)',
    bands:[{min:null,max:-0.0001,sig:'sell'},{min:-0.0001,max:0.0001,sig:'neu'},{min:0.0001,max:null,sig:'buy'}]},
 
   // FOMC (점도표 카드 우측 상단에서 직접 판단해 입력 — 자동계산 없음)
@@ -457,6 +457,7 @@ const DEFAULT = () => ({
   customBands: {}, bandOpen: {},
   history: {}, trendOpen: {}, trendRange: {}, trendFreq: {},
   manualOverride: {},
+  manDate: {},
   fomcMeetings: {}, fomcActiveKey: null, fomcPathFilter: {},
   fomcOpen: true,
   settingsOpen:true, lastUpdate:null,
@@ -474,6 +475,7 @@ async function load(){
       history:{...(saved.history||{})}, trendOpen:{...(saved.trendOpen||{})}, trendRange:{...(saved.trendRange||{})},
       trendFreq:{...(saved.trendFreq||{})},
       manualOverride:{...(saved.manualOverride||{})},
+      manDate:{...(saved.manDate||{})},
       fomcMeetings:{...(saved.fomcMeetings||{})}, fomcActiveKey: saved.fomcActiveKey||null,
       fomcPathFilter:{...(saved.fomcPathFilter||{})} };
       // migrate legacy single-meeting shape (pre multi-meeting update)
@@ -492,6 +494,7 @@ function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.g
 function snapshotToday(){
   const t = todayStr();
   INDICATORS.forEach(i=>{
+    if(i.manualEntry || i.expect) return;  // 수기입력 지표는 저장 버튼으로만 기록
     const v = indValue(i);
     if(v==null||isNaN(v)) return;
     if(!S.history[i.key]) S.history[i.key]=[];
@@ -1026,6 +1029,17 @@ function indRow(i){
     }
   }
 
+  // manualEntry 지표 — 날짜 지정 후 저장 버튼으로만 기록 (자동 스냅샷 제외)
+  if(i.manualEntry){
+    const meta = row.querySelector('.meta');
+    const d = S.manDate[i.key] || '';
+    const curVal = S.vals[i.key] != null ? S.vals[i.key] : '';
+    meta.appendChild(el(`<div class="expect">
+      <input type="date" data-mandate="${i.key}" value="${d}" title="기록할 날짜">
+      <input placeholder="값 입력 (${i.unit||'숫자'})" value="${curVal}" data-manval="${i.key}" inputmode="decimal">
+      <button class="exsave-btn" data-mansave="${i.key}" title="지정한 날짜로 추세 기록에 저장">저장</button></div>`));
+  }
+
   if(chgHtml) right.appendChild(el(chgHtml));
 
   // value
@@ -1178,6 +1192,29 @@ function bind(){
     if(!isNaN(eNum)) point.e = eNum;
     const idx = arr.findIndex(p=>p.t===t);
     if(idx>=0) arr[idx]={...arr[idx], ...point}; else arr.push(point);
+    arr.sort((a,b)=>a.t.localeCompare(b.t));
+    if(arr.length>365) arr.splice(0, arr.length-365);
+    save(); render();
+    toast(`✓ ${t} 기록 저장 완료`);
+  });
+  // manualEntry 지표 핸들러
+  document.querySelectorAll('[data-mandate]').forEach(inp=> inp.addEventListener('change',e=>{
+    const k=e.target.dataset.mandate; S.manDate[k]=e.target.value; save();
+  }));
+  document.querySelectorAll('[data-manval]').forEach(inp=> inp.addEventListener('change',e=>{
+    const k=e.target.dataset.manval;
+    const num = parseFloat(String(e.target.value).replace(/,/g,'').trim());
+    if(!isNaN(num)){ S.vals[k]=num; save(); render(); }
+  }));
+  document.querySelectorAll('[data-mansave]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.mansave;
+    const num = S.vals[k];
+    if(num==null||isNaN(num)){ toast('값을 먼저 입력하세요'); return; }
+    const t = S.manDate[k] || todayStr();
+    if(!S.history[k]) S.history[k]=[];
+    const arr = S.history[k];
+    const idx = arr.findIndex(p=>p.t===t);
+    if(idx>=0) arr[idx].v=num; else arr.push({t,v:num});
     arr.sort((a,b)=>a.t.localeCompare(b.t));
     if(arr.length>365) arr.splice(0, arr.length-365);
     save(); render();
