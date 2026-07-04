@@ -127,8 +127,9 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
 .ex-compare b{color:var(--ink)}
 .ex-tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:var(--panel-2);
   color:var(--accent);border:1px solid var(--border)}
-.ex-rightval{font-size:11px;line-height:1.5;color:var(--muted);text-align:right;white-space:nowrap}
-.ex-rightval b{color:var(--ink)}
+.ex-rightval{font-size:11px;line-height:1.6;text-align:right;white-space:nowrap}
+.ex-rightval .rv{color:var(--accent);font-weight:700}
+.ex-rightval .ev{color:#E3A93C;font-weight:700}
 
 /* threshold editor */
 .ind-band-wrap{grid-column:1/-1;margin-top:2px}
@@ -184,10 +185,14 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
 .hist-val{flex:1;min-width:0;font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--panel);
   border:1px solid var(--border);border-radius:7px;color:var(--ink);padding:5px 8px}
 .hist-val:focus{outline:none;border-color:var(--accent)}
-.hist-unit{font-size:10.5px;color:var(--faint);width:30px;flex-shrink:0}
-.hist-rlabel{font-size:10px;color:var(--faint);flex-shrink:0}
-.hist-expect{font-size:11px;color:var(--muted);flex-shrink:0;white-space:nowrap;padding-left:6px;border-left:1px solid var(--border)}
-.hist-expect b{color:var(--ink)}
+.hist-unit{font-size:10.5px;color:var(--faint);width:22px;flex-shrink:0}
+.hist-rlabel{font-size:10px;color:var(--accent);flex-shrink:0;font-weight:700}
+.hist-elabel{color:#E3A93C}
+.hist-val{flex:1;min-width:0;font-family:'JetBrains Mono',monospace;font-size:12px;background:var(--panel);
+  border:1px solid var(--border);border-radius:7px;color:var(--ink);padding:5px 8px}
+.hist-val:focus{outline:none;border-color:var(--accent)}
+.hist-eval:focus{border-color:#E3A93C}
+.hist-row-expect{display:grid;grid-template-columns:82px 28px 1fr 22px 28px 1fr 22px 28px;gap:6px;align-items:center}
 .hist-del{background:none;border:none;color:var(--faint);cursor:pointer;font-size:13px;padding:4px 7px;
   border-radius:6px;flex-shrink:0;line-height:1}
 .hist-del:hover{color:var(--sell);background:var(--sell-bg)}
@@ -638,18 +643,24 @@ function histEditableList(i){
   }
   const shown = arr.slice(0,30);
   const hasExpect = !!i.expect;
+  const unit = i.unit||'';
   const rows = shown.map(p=>{
-    const eTxt = (hasExpect && p.e!=null && !isNaN(p.e)) ? `<span class="hist-expect" title="예상치">예상 <b class="mono">${p.e}${i.unit||''}</b></span>` : (hasExpect ? `<span class="hist-expect" style="color:var(--faint)">예상 —</span>` : '');
-    return `<div class="hist-row">
+    const eVal = (p.e!=null && !isNaN(p.e)) ? p.e : '';
+    const expectCol = hasExpect
+      ? `<span class="hist-rlabel hist-elabel">예상</span>
+         <input class="hist-val hist-eval mono" type="text" inputmode="decimal" value="${eVal}" placeholder="—" data-histeditexp="${i.key}" data-histdate="${p.t}">
+         <span class="hist-unit">${unit}</span>`
+      : '';
+    return `<div class="hist-row${hasExpect?' hist-row-expect':''}">
       <span class="hist-date">${p.t}</span>
       <span class="hist-rlabel">결과</span>
       <input class="hist-val mono" type="text" inputmode="decimal" value="${p.v}" data-histedit="${i.key}" data-histdate="${p.t}">
-      <span class="hist-unit">${i.unit||''}</span>
-      ${eTxt}
+      <span class="hist-unit">${unit}</span>
+      ${expectCol}
       <button class="hist-del" data-histdel="${i.key}" data-histdate="${p.t}" title="이 기록 삭제">✕</button>
     </div>`;
   }).join('');
-  return `<div class="hist-list"><div class="hist-list-head">저장된 기록 ${arr.length}개${arr.length>30?' 중 최근 30개 표시':''} · 값을 바로 클릭해 수정 가능
+  return `<div class="hist-list"><div class="hist-list-head">저장된 기록 ${arr.length}개${arr.length>30?' 중 최근 30개 표시':''} · 결과·예상 모두 수정 가능
     <button class="hist-list-toggle" data-histlisttoggle="${i.key}" style="float:right">▲ 접기</button></div>${rows}</div>`;
 }
 
@@ -1011,7 +1022,7 @@ function indRow(i){
         tagTxt = diff>0? `예상 상회 (+${diff}${i.unit})` : diff<0? `예상 하회 (${diff}${i.unit})` : '예상 부합';
       }
       meta.appendChild(el(`<div class="ex-compare">결과 <b class="mono">${rTxt}</b> / 예상 <b class="mono">${eTxt}</b>${tagTxt?`<span class="ex-tag">${tagTxt}</span>`:''}</div>`));
-      right.appendChild(el(`<div class="ex-rightval mono">결과 <b>${rTxt}</b><br>예상 <b>${eTxt}</b></div>`));
+      right.appendChild(el(`<div class="ex-rightval mono">결과 <span class="rv">${rTxt}</span><br>예상 <span class="ev">${eTxt}</span></div>`));
     }
   }
 
@@ -1181,7 +1192,22 @@ function bind(){
     if(idx<0) return;
     if(isNaN(num)){ toast('숫자를 입력해주세요'); render(); return; }
     arr[idx].v = num; save(); render();
-    toast(`✓ ${d} 기록 수정 완료`);
+    toast(`✓ ${d} 결과 수정 완료`);
+  }));
+  document.querySelectorAll('[data-histeditexp]').forEach(inp=> inp.addEventListener('change', e=>{
+    const k=e.target.dataset.histeditexp, d=e.target.dataset.histdate;
+    const raw = String(e.target.value).replace(/,/g,'').trim();
+    const arr = S.history[k]; if(!arr) return;
+    const idx = arr.findIndex(p=>p.t===d);
+    if(idx<0) return;
+    if(raw==='' || raw==='—'){ delete arr[idx].e; }
+    else {
+      const num = parseFloat(raw);
+      if(isNaN(num)){ toast('숫자를 입력해주세요'); render(); return; }
+      arr[idx].e = num;
+    }
+    save(); render();
+    toast(`✓ ${d} 예상 수정 완료`);
   }));
   document.querySelectorAll('[data-histlisttoggle]').forEach(b=> b.onclick=()=>{
     const k=b.dataset.histlisttoggle;
