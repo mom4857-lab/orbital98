@@ -389,7 +389,7 @@ const INDICATORS = [
   {key:'ppi', cat:'infl', name:'PPI 생산자물가', unit:'%', freq:'월1회', mode:'manual', val:null, manual:'sell',
    src:'https://kr.investing.com/economic-calendar/ppi-238', desc:'생산비용 → 향후 CPI 선행. 급등 시 마진 압박', expect:true},
   {key:'pmi', cat:'infl', name:'PMI 제조업', unit:'', freq:'월1회', mode:'band', val:54, chg:null,
-   src:'https://kr.investing.com/economic-calendar/ism-manufacturing-pmi-173', desc:'50↑ 확장(매수) / 48~52 경계 / 48↓ 위축(매도)',
+   src:'https://kr.investing.com/economic-calendar/ism-manufacturing-pmi-173', desc:'50↑ 확장(매수) / 48~52 경계 / 48↓ 위축(매도)', expect:true,
    bands:[{min:null,max:48,sig:'sell'},{min:48,max:52,sig:'neu'},{min:52,max:null,sig:'buy'}]},
 
   // 유동성 (FRED 자동 + 전월비 기반)
