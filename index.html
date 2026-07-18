@@ -289,13 +289,15 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
 .range-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;font-size:11px;color:var(--faint)}
 .range-row input.date-input{font-family:inherit;font-size:11.5px;background:var(--panel-2);border:1px solid var(--border);
   border-radius:7px;color:var(--ink);padding:5px 7px}
-.date-pick-btn{background:var(--panel-2);border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:12px;
-  padding:4px 7px;line-height:1;opacity:.85;color:var(--ink)}
-.date-pick-btn:hover{opacity:1;border-color:var(--accent)}
+.date-pick-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
+  background:var(--panel-2);border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:12px;opacity:.85}
+.date-pick-wrap:hover{opacity:1;border-color:var(--accent)}
+.date-native-overlay{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:none;padding:0;margin:0}
 .cal-icon{background:none;border:none;cursor:pointer;font-size:12px;padding:2px 4px;line-height:1;opacity:.75}
 .cal-icon:hover{opacity:1}
-.rate-badges{display:flex;gap:14px;margin-bottom:10px;font-size:12px;color:var(--muted)}
+.rate-badges{display:flex;gap:14px;margin-bottom:10px;font-size:12px;color:var(--muted);flex-wrap:wrap}
 .rate-badges b{font-size:13px}
+.rate-asof{color:var(--faint);font-size:11px}
 .note-row{display:flex;gap:6px;align-items:center;margin-top:6px}
 .note-row input{flex:1;min-width:0;font-size:12px;padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:var(--panel-2);color:var(--ink)}
 .note-display{font-size:12px;color:var(--muted);margin-top:4px}
@@ -565,25 +567,6 @@ function overall(){
 const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild;};
 const escHtml = (s)=> String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-// 📅 버튼 전용 — 화면에 보이지 않는 네이티브 date input 하나를 재사용해서 달력 UI를 띄우고,
-// 선택한 날짜를 실제 텍스트 입력창에 반영합니다 (입력창 자체는 계속 텍스트라 서식/포커스 문제가 없음).
-let _datePickerEl = null;
-function openDatePicker(targetInput){
-  if(!_datePickerEl){
-    _datePickerEl = document.createElement('input');
-    _datePickerEl.type = 'date';
-    _datePickerEl.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;width:1px;height:1px;pointer-events:none;';
-    document.body.appendChild(_datePickerEl);
-  }
-  _datePickerEl.value = /^\d{4}-\d{2}-\d{2}$/.test(targetInput.value) ? targetInput.value : '';
-  _datePickerEl.onchange = () => {
-    targetInput.value = _datePickerEl.value;
-    targetInput.dispatchEvent(new Event('input', {bubbles:true}));
-    targetInput.dispatchEvent(new Event('change', {bubbles:true}));
-  };
-  if(_datePickerEl.showPicker){ try{ _datePickerEl.showPicker(); return; }catch(e){} }
-  _datePickerEl.click();
-}
 const sigCls = s=>({buy:'s-buy',neu:'s-neu',sell:'s-sell',off:'s-off'}[s]);
 function fmt(v,unit){ if(v==null||isNaN(v)) return '—'; let n = Math.abs(v)>=1000? v.toLocaleString('en-US',{maximumFractionDigits:0}) : v.toString(); return n; }
 
@@ -704,7 +687,7 @@ async function queryTrend(key){
 
 
 let __trendSeq = 0;
-function renderTrendSVG(hist, i, rateInfo){
+function renderTrendSVG(hist, i){
   const W=680,H=240,padL=60,padR=20,padT=22,padB=34;
   const innerW=W-padL-padR, innerH=H-padT-padB;
   // 전월/전주比(%) 기준 구간은 레벨값 그래프와 척도가 달라 표시하지 않음
@@ -743,19 +726,6 @@ function renderTrendSVG(hist, i, rateInfo){
   const delta = last.v-first.v;
   const trendColor = delta>=0? 'var(--buy)':'var(--sell)';
   const firstX = Math.max(xAt(0), padL+18), lastX = Math.min(xAt(hist.length-1), W-padR-18);
-  // 마지막 데이터 포인트 바로 위에 전년비/전월비를 직접 라벨로 표시 (표시 기간과 무관하게 항상 최신 기준으로 계산됨)
-  let rateAnnotation = '';
-  if(rateInfo && (rateInfo.mom!=null || rateInfo.yoy!=null)){
-    const fmt = v => v==null ? '—' : `${v>0?'+':''}${v}%`;
-    const clr = v => v==null ? 'var(--muted)' : (v>0?'var(--buy)':(v<0?'var(--sell)':'var(--muted)'));
-    const lineH = 13;
-    const lastY = yAt(last.v);
-    let yMom = lastY - 16;      // 전월(아래줄, 점에 더 가까움)
-    let yYoy = yMom - lineH;    // 전년(윗줄)
-    if(yYoy < padT+10){ yYoy = padT+10; yMom = yYoy + lineH; } // 겹치지 않도록 두 줄을 한 묶음으로 같이 내림
-    rateAnnotation = `<text x="${lastX}" y="${yYoy.toFixed(1)}" font-size="10.5" font-weight="600" text-anchor="end" style="fill:${clr(rateInfo.yoy)}">전년 ${fmt(rateInfo.yoy)}</text>
-      <text x="${lastX}" y="${yMom.toFixed(1)}" font-size="10.5" font-weight="600" text-anchor="end" style="fill:${clr(rateInfo.mom)}">전월 ${fmt(rateInfo.mom)}</text>`;
-  }
   return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" preserveAspectRatio="xMidYMid meet">
     <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="var(--accent)" stop-opacity=".35"/>
@@ -766,7 +736,6 @@ function renderTrendSVG(hist, i, rateInfo){
     <polygon points="${areaPts}" style="fill:url(#${gradId})"/>
     <polyline points="${pts}" fill="none" style="stroke:var(--accent);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round"/>
     ${dots}
-    ${rateAnnotation}
     <text x="${firstX}" y="${H-9}" font-size="10" text-anchor="start" style="fill:var(--faint)">${first.t}</text>
     <text x="${lastX}" y="${H-9}" font-size="10" text-anchor="end" style="fill:var(--faint)">${last.t}</text>
   </svg>
@@ -805,10 +774,10 @@ function histEditableList(i){
 }
 
 // 전월비/전년비 % 계산 — 히스토리 배열(t: 'YYYY-MM-DD', v: number)에서 최신값 기준 가장 가까운 -1개월/-1년 지점을 찾아 비교
-function calcYoyMom(pts){
-  const sorted = (pts||[]).filter(p=>p.v!=null && !isNaN(p.v)).slice().sort((a,b)=>a.t.localeCompare(b.t));
+function calcYoyMom(pool, refPoint){
+  const sorted = (pool||[]).filter(p=>p.v!=null && !isNaN(p.v)).slice().sort((a,b)=>a.t.localeCompare(b.t));
   if(sorted.length<2) return null;
-  const latest = sorted[sorted.length-1];
+  const latest = refPoint || sorted[sorted.length-1];
   const latestMs = new Date(latest.t).getTime();
   const DAY = 86400000;
   const findNear = (targetMs, maxDiffDays) => {
@@ -825,33 +794,38 @@ function calcYoyMom(pts){
   const yoy = (yoyPt && yoyPt.v!==0) ? round((latest.v-yoyPt.v)/Math.abs(yoyPt.v)*100,2) : null;
   return {mom, yoy, latestDate: latest.t};
 }
-// 전월비/전년비는 항상 "화면에 표시 중인 기간"과 무관하게 계산됩니다 —
-// FRED 자동지표는 기본 24개월 캐시(FRED_HIST_CACHE)를, 수기입력(MMF 등)은 저장된 전체 기록을 사용합니다.
-function getRateInfo(i){
+// 전월비/전년비 비교 대상(±1개월/±1년 지점)은 항상 넉넉한 기본 캐시(FRED_HIST_CACHE)에서 찾지만,
+// "기준 시점" 자체는 지금 화면에 표시 중인 기간의 가장 최신 데이터로 잡습니다 — 기간을 바꾸면 그 기준도 같이 바뀝니다.
+function getRateInfo(i, displayPts){
   if(!i.rateDisplay) return null;
   if(isFredBacked(i.key)){
     const cache = FRED_HIST_CACHE[i.key];
     if(!cache || cache.loading || cache.error || !cache.points) return null;
-    let pts = cache.points.filter(p=>p.v!=null && !isNaN(p.v));
-    if(i.historySource) pts = pts.map(p=>({t:p.t, v: round(p.v - S.baseRate, 2)}));
-    return calcYoyMom(pts);
+    let pool = cache.points.filter(p=>p.v!=null && !isNaN(p.v));
+    if(i.historySource) pool = pool.map(p=>({t:p.t, v: round(p.v - S.baseRate, 2)}));
+    let refPoint = null;
+    if(displayPts && displayPts.length) refPoint = displayPts[displayPts.length-1];
+    return calcYoyMom(pool, refPoint);
   }
   const pts = (S.history[i.key]||[]).filter(p=>p.v!=null && !isNaN(p.v));
-  return calcYoyMom(pts);
+  let refPoint = null;
+  if(displayPts && displayPts.length) refPoint = displayPts[displayPts.length-1];
+  return calcYoyMom(pts, refPoint);
 }
-function rateHtml(i){
+function rateHtml(i, displayPts){
   if(!i.rateDisplay) return '';
   if(isFredBacked(i.key)){
     const cache = FRED_HIST_CACHE[i.key];
     if(!cache || cache.loading) return `<div class="rate-badges"><span class="rate-badge">전월비·전년비 계산 중…</span></div>`;
   }
-  const r = getRateInfo(i);
+  const r = getRateInfo(i, displayPts);
   if(!r) return '';
   const fmtPct = v => v==null ? '데이터 부족' : `${v>0?'+':''}${v}%`;
   const cls = v => v==null?'':(v>0?'up':(v<0?'down':''));
   return `<div class="rate-badges">
     <span class="rate-badge">전월비 <b class="${cls(r.mom)}">${fmtPct(r.mom)}</b></span>
     <span class="rate-badge">전년비 <b class="${cls(r.yoy)}">${fmtPct(r.yoy)}</b></span>
+    <span class="rate-badge rate-asof">기준일 ${r.latestDate}</span>
   </div>`;
 }
 function buildTrendChart(i){
@@ -865,7 +839,7 @@ function buildTrendChart(i){
     let pts = (cache.points||[]).filter(p=>p.v!=null && !isNaN(p.v));
     if(i.historySource) pts = pts.map(p=>({t:p.t, v: round(p.v - S.baseRate, 2)}));
     if(pts.length<2) return `<div class="trend-empty">선택한 기간에 데이터가 없습니다. 기간을 넓혀서 다시 조회해보세요.</div>`;
-    return rateHtml(i) + renderTrendSVG(pts, i, getRateInfo(i));
+    return rateHtml(i, pts) + renderTrendSVG(pts, i);
   }
   const fullHist = (S.history[i.key]||[]).filter(p=>p.v!=null && !isNaN(p.v)).sort((a,b)=>a.t.localeCompare(b.t));
   const range = S.trendRange[i.key];
@@ -876,7 +850,7 @@ function buildTrendChart(i){
   if(hist.length<2){
     chartHtml = `<div class="trend-empty">${(S.history[i.key]||[]).length? '선택한 기간에 데이터가 부족합니다. 기간을 넓혀보세요.' : '추세 데이터가 없습니다. 위 "결과" 칸에 값과 날짜를 입력하고 "저장"을 누르면 기록이 쌓입니다.'}</div>`;
   } else {
-    chartHtml = rateHtml(i) + renderTrendSVG(hist, i, getRateInfo(i));
+    chartHtml = rateHtml(i, hist) + renderTrendSVG(hist, i);
   }
   return chartHtml + histEditableList(i);
 }
@@ -1212,7 +1186,7 @@ function indRow(i){
     const meta = row.querySelector('.meta');
     const exDiv = el(`<div class="expect">
       <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" class="date-input" data-exdate="${i.key}" value="${ex.d||''}" title="이 값이 발표/해당된 날짜">
-      <button type="button" class="date-pick-btn" data-datepick="[data-exdate=&quot;${i.key}&quot;]" title="달력에서 선택">📅</button>
+      <span class="date-pick-wrap" title="달력에서 선택">📅<input type="date" class="date-native-overlay" data-exdate-native="${i.key}" value="${ex.d||''}"></span>
       <input placeholder="결과(숫자${i.unit?', '+i.unit:''})" value="${ex.r}" data-ex="${i.key}" data-f="r">
       <span>/</span>
       <input placeholder="예상" value="${ex.e}" data-ex="${i.key}" data-f="e">
@@ -1241,7 +1215,7 @@ function indRow(i){
     const curVal = S.vals[i.key] != null ? S.vals[i.key] : '';
     meta.appendChild(el(`<div class="expect">
       <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" class="date-input" data-mandate="${i.key}" value="${d}" title="기록할 날짜">
-      <button type="button" class="date-pick-btn" data-datepick="[data-mandate=&quot;${i.key}&quot;]" title="달력에서 선택">📅</button>
+      <span class="date-pick-wrap" title="달력에서 선택">📅<input type="date" class="date-native-overlay" data-mandate-native="${i.key}" value="${d}"></span>
       <input placeholder="값 입력 (${i.unit||'숫자'})" value="${curVal}" data-manval="${i.key}" inputmode="decimal">
       <button class="exsave-btn" data-mansave="${i.key}" title="지정한 날짜로 추세 기록에 저장">저장</button></div>`));
   }
@@ -1301,10 +1275,10 @@ function indRow(i){
     const rangeRow = el(`<div class="range-row">
       <span>기간</span>
       <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" class="date-input" data-trendfrom="${i.key}" value="${range.from||''}">
-      <button type="button" class="date-pick-btn" data-datepick="[data-trendfrom=&quot;${i.key}&quot;]" title="달력에서 선택">📅</button>
+      <span class="date-pick-wrap" title="달력에서 선택">📅<input type="date" class="date-native-overlay" data-trendfrom-native="${i.key}" value="${range.from||''}"></span>
       <span>~</span>
       <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" class="date-input" data-trendto="${i.key}" value="${range.to||''}">
-      <button type="button" class="date-pick-btn" data-datepick="[data-trendto=&quot;${i.key}&quot;]" title="달력에서 선택">📅</button>
+      <span class="date-pick-wrap" title="달력에서 선택">📅<input type="date" class="date-native-overlay" data-trendto-native="${i.key}" value="${range.to||''}"></span>
       <button class="btn ghost" data-trendreset="${i.key}">전체 기간</button>
       <button class="btn primary" data-trendquery="${i.key}">조회</button>
     </div>`);
@@ -1530,18 +1504,24 @@ function bind(){
     toast('✓ 메모 저장 완료');
   });
   document.querySelectorAll('[data-note]').forEach(inp=> inp.addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();}));
-  // 📅 버튼 — 텍스트로 직접 입력하기 어려울 때 네이티브 달력 UI로 날짜를 고를 수 있게 함
-  document.querySelectorAll('[data-datepick]').forEach(b=> b.onclick=()=>{
-    const target = document.querySelector(b.dataset.datepick);
-    if(target) openDatePicker(target);
-  });
+  // 📅 오버레이 — 아이콘 위에 겹쳐진 진짜 date input을 클릭하면 그 자리에서 바로 달력이 뜨고,
+  // 고른 날짜를 옆의 텍스트 입력창에 반영합니다 (기존 change 핸들러를 그대로 재사용).
+  const syncOverlay = (nativeSel, textSel) => document.querySelectorAll(nativeSel).forEach(nativeInp=> nativeInp.addEventListener('change', e=>{
+    const k = e.target.dataset[Object.keys(e.target.dataset).find(d=>d.endsWith('Native'))];
+    const textInput = document.querySelector(`${textSel}="${k}"]`);
+    if(textInput){ textInput.value = e.target.value; textInput.dispatchEvent(new Event('change',{bubbles:true})); }
+  }));
+  syncOverlay('[data-exdate-native]', '[data-exdate');
+  syncOverlay('[data-mandate-native]', '[data-mandate');
+  syncOverlay('[data-trendfrom-native]', '[data-trendfrom');
+  syncOverlay('[data-trendto-native]', '[data-trendto');
   document.querySelectorAll('[data-trendfrom]').forEach(inp=> inp.addEventListener('change',e=>{
     const k=e.target.dataset.trendfrom; if(!S.trendRange[k])S.trendRange[k]={};
-    S.trendRange[k].from = e.target.value||undefined; save(); render();
+    S.trendRange[k].from = e.target.value||undefined; save();
   }));
   document.querySelectorAll('[data-trendto]').forEach(inp=> inp.addEventListener('change',e=>{
     const k=e.target.dataset.trendto; if(!S.trendRange[k])S.trendRange[k]={};
-    S.trendRange[k].to = e.target.value||undefined; save(); render();
+    S.trendRange[k].to = e.target.value||undefined; save();
   }));
   document.querySelectorAll('[data-trendreset]').forEach(b=> b.onclick=()=>{
     const k=b.dataset.trendreset; delete S.trendRange[k]; save(); render();
