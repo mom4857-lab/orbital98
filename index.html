@@ -97,9 +97,10 @@
 .ind{display:grid;grid-template-columns:1fr auto;gap:10px 14px;align-items:center;
   padding:13px 8px;border-top:1px solid var(--border)}
 .ind:first-child{border-top:none}
-.ind-overridden{background:linear-gradient(90deg, var(--accent-bg), transparent 40%);
-  border-left:3px solid var(--accent);padding-left:5px}
-.sigpill-override{border:2px dashed var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
+.ind-overridden{background:linear-gradient(90deg, rgba(196,84,74,.14), transparent 40%);
+  border-left:3px solid #C4544A;padding-left:5px}
+.sigpill-override{border:2px dashed #C4544A;box-shadow:0 0 0 2px rgba(196,84,74,.14)}
+.sigsel-flag{border:2px dashed #C4544A!important;box-shadow:0 0 0 2px rgba(196,84,74,.14)}
 .ind .meta{min-width:0}
 .ind .iname{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .iname-link{color:inherit;text-decoration:none;border-bottom:1px dashed var(--faint)}
@@ -1175,11 +1176,13 @@ function indRow(i){
   const v = indValue(i);
   const chg = S.chgs[i.key];
   const isOverridden = !!(S.manualOverride[i.key] && S.manualOverride[i.key]!=='auto');
+  const isManualMode = i.mode==='manual';
+  const isFlagged = isOverridden || isManualMode;
   const chgHtml = (chg!=null && !isNaN(chg) && i.mode!=='derived') ?
     `<span class="chg ${chg>=0?'up':'down'}">${chg>=0?'▲':'▼'} ${(Math.abs(chg)*100).toFixed(1)}%</span>` :
     (i.mode==='derived'?`<span class="chg" style="color:var(--faint)">계산값</span>`:'');
 
-  const row = el(`<div class="ind${isOverridden?' ind-overridden':''}"><div class="meta">
+  const row = el(`<div class="ind${isFlagged?' ind-overridden':''}"><div class="meta">
       <div class="iname"><a class="iname-link" href="${i.src}" target="_blank" rel="noopener" title="${i.src} 새 탭에서 열기">${i.name}</a><span class="freq">${i.freq}</span><button class="cal-icon" data-trendtoggle="${i.key}" title="추세·기간 보기">📅</button><button class="cal-icon${S.notes[i.key]?' has-note':''}" data-notetoggle="${i.key}" title="한줄 메모">📝</button></div>
       <div class="idesc">${i.desc} · <a href="${i.src}" target="_blank" rel="noopener">출처</a></div>
     </div><div class="right"></div></div>`);
@@ -1248,7 +1251,7 @@ function indRow(i){
 
   // signal control
   if(i.mode==='manual'){
-    const sel = el(`<select class="sigsel" data-sig="${i.key}">
+    const sel = el(`<select class="sigsel sigsel-flag ${sigCls(sig)}" data-sig="${i.key}" title="수기 입력 지표">
       <option value="buy" ${sig==='buy'?'selected':''}>매수</option>
       <option value="neu" ${sig==='neu'?'selected':''}>중립</option>
       <option value="sell" ${sig==='sell'?'selected':''}>매도</option>
