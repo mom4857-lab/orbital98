@@ -601,6 +601,37 @@ function buildExportText(){
     if(cs.score===null){ out += `- ${c.name} (가중치 ${w}): 데이터 없음\n`; return; }
     out += `- ${c.name} (가중치 ${w}): 평균 ${cs.score>=0?'+':''}${cs.score.toFixed(2)} · 매수${cs.b} 중립${cs.nu} 매도${cs.s}\n`;
   });
+
+  // FOMC 점도표 — 가장 최신 회의 기준 (meetingDate 또는 meetingLabel 내림차순 정렬 후 첫 번째)
+  const fomcKeys = Object.keys(S.fomcMeetings).sort((a,b)=>{
+    const ma=S.fomcMeetings[a], mb=S.fomcMeetings[b];
+    return (mb.meetingDate||mb.meetingLabel||'').localeCompare(ma.meetingDate||ma.meetingLabel||'');
+  });
+  if(fomcKeys.length){
+    const f = S.fomcMeetings[fomcKeys[0]];
+    out += `\n## FOMC 점도표 (최신: ${f.meetingLabel||fomcKeys[0]}${f.meetingDate?` · ${f.meetingDate}`:''})\n`;
+    (f.years||[]).forEach(y=>{
+      out += `- ${y.label||'(연도 미상)'}: 중앙값 ${y.median!=null?y.median+'%':'—'}`;
+      if(y.lo!=null || y.hi!=null) out += ` (범위 ${y.lo!=null?y.lo+'%':'?'}~${y.hi!=null?y.hi+'%':'?'})`;
+      if(y.votes!=null) out += ` · 투표 ${y.votes}명`;
+      if(y.note) out += ` — ${y.note}`;
+      out += '\n';
+    });
+    if((f.shifts||[]).length){
+      out += `- 전 회의 대비 변화:\n`;
+      f.shifts.forEach(s=>{
+        out += `  - ${s.target||''}: ${s.prev!=null?s.prev+'%':'?'} → ${s.curr!=null?s.curr+'%':'?'}${s.note?` (${s.note})`:''}\n`;
+      });
+    }
+    if((f.split||[]).length){
+      out += `- 위원 성향 분포: ${f.split.map(s=>`${s.label} ${s.count}명(${s.sig})`).join(', ')}\n`;
+    }
+    if(f.mediaSynthesis) out += `- 언론 종합 해석: ${f.mediaSynthesis}\n`;
+    const fomcManualSig = S.manual['fomc_manual'];
+    if(fomcManualSig) out += `- 현재 적용 중인 FOMC 수동 신호: ${SIG[fomcManualSig]||fomcManualSig}\n`;
+  } else {
+    out += `\n## FOMC 점도표\n- 저장된 FOMC 회의 데이터가 없습니다.\n`;
+  }
   out += `\n## 지표 상세\n`;
 
   CATS.forEach(c=>{
