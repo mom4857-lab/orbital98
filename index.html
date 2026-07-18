@@ -173,7 +173,7 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
 .exsave-btn{font-size:11px;padding:4px 9px;border-radius:7px;border:1px solid var(--border);
   background:var(--panel);color:var(--accent);cursor:pointer;font-weight:700;font-family:inherit}
 .exsave-btn:hover{border-color:var(--accent);background:var(--accent-bg)}
-.expect input[type=date]{width:118px}
+.expect input.date-input{width:118px}
 .hist-list{margin-top:12px;border-top:1px dashed var(--border);padding-top:10px;max-height:260px;overflow-y:auto}
 .hist-list-head{font-size:10.5px;color:var(--faint);font-weight:700;margin-bottom:7px;letter-spacing:.02em;overflow:hidden}
 .hist-row{display:flex;align-items:center;gap:8px;padding:4px 3px;border-radius:7px}
@@ -287,8 +287,11 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
 
 /* trend date range */
 .range-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;font-size:11px;color:var(--faint)}
-.range-row input[type=date]{font-family:inherit;font-size:11.5px;background:var(--panel);border:1px solid var(--border);
-  border-radius:7px;color:var(--ink);padding:5px 7px;color-scheme:dark}
+.range-row input.date-input{font-family:inherit;font-size:11.5px;background:var(--panel-2);border:1px solid var(--border);
+  border-radius:7px;color:var(--ink);padding:5px 7px}
+.date-pick-btn{background:var(--panel-2);border:1px solid var(--border);border-radius:7px;cursor:pointer;font-size:12px;
+  padding:4px 7px;line-height:1;opacity:.85;color:var(--ink)}
+.date-pick-btn:hover{opacity:1;border-color:var(--accent)}
 .cal-icon{background:none;border:none;cursor:pointer;font-size:12px;padding:2px 4px;line-height:1;opacity:.75}
 .cal-icon:hover{opacity:1}
 .rate-badges{display:flex;gap:14px;margin-bottom:10px;font-size:12px;color:var(--muted)}
@@ -556,6 +559,26 @@ function overall(){
 //============================ RENDER ============================//
 const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild;};
 const escHtml = (s)=> String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// 📅 버튼 전용 — 화면에 보이지 않는 네이티브 date input 하나를 재사용해서 달력 UI를 띄우고,
+// 선택한 날짜를 실제 텍스트 입력창에 반영합니다 (입력창 자체는 계속 텍스트라 서식/포커스 문제가 없음).
+let _datePickerEl = null;
+function openDatePicker(targetInput){
+  if(!_datePickerEl){
+    _datePickerEl = document.createElement('input');
+    _datePickerEl.type = 'date';
+    _datePickerEl.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;width:1px;height:1px;pointer-events:none;';
+    document.body.appendChild(_datePickerEl);
+  }
+  _datePickerEl.value = /^\d{4}-\d{2}-\d{2}$/.test(targetInput.value) ? targetInput.value : '';
+  _datePickerEl.onchange = () => {
+    targetInput.value = _datePickerEl.value;
+    targetInput.dispatchEvent(new Event('input', {bubbles:true}));
+    targetInput.dispatchEvent(new Event('change', {bubbles:true}));
+  };
+  if(_datePickerEl.showPicker){ try{ _datePickerEl.showPicker(); return; }catch(e){} }
+  _datePickerEl.click();
+}
 const sigCls = s=>({buy:'s-buy',neu:'s-neu',sell:'s-sell',off:'s-off'}[s]);
 function fmt(v,unit){ if(v==null||isNaN(v)) return '—'; let n = Math.abs(v)>=1000? v.toLocaleString('en-US',{maximumFractionDigits:0}) : v.toString(); return n; }
 
@@ -664,16 +687,18 @@ function renderTrendSVG(hist, i, rateInfo){
   const delta = last.v-first.v;
   const trendColor = delta>=0? 'var(--buy)':'var(--sell)';
   const firstX = Math.max(xAt(0), padL+18), lastX = Math.min(xAt(hist.length-1), W-padR-18);
-  // 마지막 데이터 포인트 바로 위에 전월비/전년비를 직접 라벨로 표시 (표시 기간과 무관하게 항상 최신 기준으로 계산됨)
+  // 마지막 데이터 포인트 바로 위에 전년비/전월비를 직접 라벨로 표시 (표시 기간과 무관하게 항상 최신 기준으로 계산됨)
   let rateAnnotation = '';
   if(rateInfo && (rateInfo.mom!=null || rateInfo.yoy!=null)){
     const fmt = v => v==null ? '—' : `${v>0?'+':''}${v}%`;
     const clr = v => v==null ? 'var(--muted)' : (v>0?'var(--buy)':(v<0?'var(--sell)':'var(--muted)'));
+    const lineH = 13;
     const lastY = yAt(last.v);
-    const y2 = Math.max(lastY-16, padT+10);
-    const y1 = Math.max(y2-13, padT+10);
-    rateAnnotation = `<text x="${lastX}" y="${y1.toFixed(1)}" font-size="10.5" font-weight="600" text-anchor="end" style="fill:${clr(rateInfo.mom)}">전월 ${fmt(rateInfo.mom)}</text>
-      <text x="${lastX}" y="${y2.toFixed(1)}" font-size="10.5" font-weight="600" text-anchor="end" style="fill:${clr(rateInfo.yoy)}">전년 ${fmt(rateInfo.yoy)}</text>`;
+    let yMom = lastY - 16;      // 전월(아래줄, 점에 더 가까움)
+    let yYoy = yMom - lineH;    // 전년(윗줄)
+    if(yYoy < padT+10){ yYoy = padT+10; yMom = yYoy + lineH; } // 겹치지 않도록 두 줄을 한 묶음으로 같이 내림
+    rateAnnotation = `<text x="${lastX}" y="${yYoy.toFixed(1)}" font-size="10.5" font-weight="600" text-anchor="end" style="fill:${clr(rateInfo.yoy)}">전년 ${fmt(rateInfo.yoy)}</text>
+      <text x="${lastX}" y="${yMom.toFixed(1)}" font-size="10.5" font-weight="600" text-anchor="end" style="fill:${clr(rateInfo.mom)}">전월 ${fmt(rateInfo.mom)}</text>`;
   }
   return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" preserveAspectRatio="xMidYMid meet">
     <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
@@ -1128,7 +1153,8 @@ function indRow(i){
     const ex = S.expect[i.key]||{r:'',e:'',d:''};
     const meta = row.querySelector('.meta');
     const exDiv = el(`<div class="expect">
-      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" data-exdate="${i.key}" value="${ex.d||''}" title="이 값이 발표/해당된 날짜">
+      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" class="date-input" data-exdate="${i.key}" value="${ex.d||''}" title="이 값이 발표/해당된 날짜">
+      <button type="button" class="date-pick-btn" data-datepick="[data-exdate=&quot;${i.key}&quot;]" title="달력에서 선택">📅</button>
       <input placeholder="결과(숫자${i.unit?', '+i.unit:''})" value="${ex.r}" data-ex="${i.key}" data-f="r">
       <span>/</span>
       <input placeholder="예상" value="${ex.e}" data-ex="${i.key}" data-f="e">
@@ -1156,7 +1182,8 @@ function indRow(i){
     const d = S.manDate[i.key] || '';
     const curVal = S.vals[i.key] != null ? S.vals[i.key] : '';
     meta.appendChild(el(`<div class="expect">
-      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" data-mandate="${i.key}" value="${d}" title="기록할 날짜">
+      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" class="date-input" data-mandate="${i.key}" value="${d}" title="기록할 날짜">
+      <button type="button" class="date-pick-btn" data-datepick="[data-mandate=&quot;${i.key}&quot;]" title="달력에서 선택">📅</button>
       <input placeholder="값 입력 (${i.unit||'숫자'})" value="${curVal}" data-manval="${i.key}" inputmode="decimal">
       <button class="exsave-btn" data-mansave="${i.key}" title="지정한 날짜로 추세 기록에 저장">저장</button></div>`));
   }
@@ -1215,9 +1242,11 @@ function indRow(i){
     const isFred = isFredBacked(i.key);
     const rangeRow = el(`<div class="range-row">
       <span>기간</span>
-      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" data-trendfrom="${i.key}" value="${range.from||''}">
+      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" class="date-input" data-trendfrom="${i.key}" value="${range.from||''}">
+      <button type="button" class="date-pick-btn" data-datepick="[data-trendfrom=&quot;${i.key}&quot;]" title="달력에서 선택">📅</button>
       <span>~</span>
-      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" data-trendto="${i.key}" value="${range.to||''}">
+      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" class="date-input" data-trendto="${i.key}" value="${range.to||''}">
+      <button type="button" class="date-pick-btn" data-datepick="[data-trendto=&quot;${i.key}&quot;]" title="달력에서 선택">📅</button>
       <button class="btn ghost" data-trendreset="${i.key}">전체 기간</button>
       <button class="btn primary" data-trendquery="${i.key}">조회</button>
     </div>`);
@@ -1440,6 +1469,11 @@ function bind(){
     toast('✓ 메모 저장 완료');
   });
   document.querySelectorAll('[data-note]').forEach(inp=> inp.addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();}));
+  // 📅 버튼 — 텍스트로 직접 입력하기 어려울 때 네이티브 달력 UI로 날짜를 고를 수 있게 함
+  document.querySelectorAll('[data-datepick]').forEach(b=> b.onclick=()=>{
+    const target = document.querySelector(b.dataset.datepick);
+    if(target) openDatePicker(target);
+  });
   document.querySelectorAll('[data-trendfrom]').forEach(inp=> inp.addEventListener('change',e=>{
     const k=e.target.dataset.trendfrom; if(!S.trendRange[k])S.trendRange[k]={};
     S.trendRange[k].from = e.target.value||undefined; save(); render();
