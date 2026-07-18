@@ -1007,7 +1007,7 @@ function indRow(i){
     const ex = S.expect[i.key]||{r:'',e:'',d:''};
     const meta = row.querySelector('.meta');
     const exDiv = el(`<div class="expect">
-      <input type="date" data-exdate="${i.key}" value="${ex.d||''}" title="이 값이 발표/해당된 날짜">
+      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" data-exdate="${i.key}" value="${ex.d||''}" title="이 값이 발표/해당된 날짜">
       <input placeholder="결과(숫자${i.unit?', '+i.unit:''})" value="${ex.r}" data-ex="${i.key}" data-f="r">
       <span>/</span>
       <input placeholder="예상" value="${ex.e}" data-ex="${i.key}" data-f="e">
@@ -1035,7 +1035,7 @@ function indRow(i){
     const d = S.manDate[i.key] || '';
     const curVal = S.vals[i.key] != null ? S.vals[i.key] : '';
     meta.appendChild(el(`<div class="expect">
-      <input type="date" data-mandate="${i.key}" value="${d}" title="기록할 날짜">
+      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" data-mandate="${i.key}" value="${d}" title="기록할 날짜">
       <input placeholder="값 입력 (${i.unit||'숫자'})" value="${curVal}" data-manval="${i.key}" inputmode="decimal">
       <button class="exsave-btn" data-mansave="${i.key}" title="지정한 날짜로 추세 기록에 저장">저장</button></div>`));
   }
@@ -1176,9 +1176,17 @@ function bind(){
     }
     save(); render();
   }));
+  // 날짜 텍스트 입력 자동 포맷팅 (YYYY-MM-DD) — 네이티브 date input의 모바일 세그먼트 이동/화살표 오류 회피
+  document.querySelectorAll('[data-exdate], [data-mandate]').forEach(inp=> inp.addEventListener('input',e=>{
+    const digits = e.target.value.replace(/[^0-9]/g,'').slice(0,8);
+    let out = digits.slice(0,4);
+    if(digits.length>4) out += '-' + digits.slice(4,6);
+    if(digits.length>6) out += '-' + digits.slice(6,8);
+    e.target.value = out;
+  }));
   document.querySelectorAll('[data-exdate]').forEach(inp=> inp.addEventListener('change',e=>{
     const k=e.target.dataset.exdate; if(!S.expect[k])S.expect[k]={r:'',e:'',d:''};
-    S.expect[k].d = e.target.value; save(); render();
+    S.expect[k].d = e.target.value; save();
   }));
   document.querySelectorAll('[data-exsave]').forEach(b=> b.onclick=()=>{
     const k=b.dataset.exsave; const ex=S.expect[k]||{r:'',e:'',d:''};
