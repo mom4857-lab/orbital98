@@ -467,6 +467,7 @@ const DEFAULT = () => ({
   manualOverride: {},
   manDate: {},
   notes: {}, noteOpen: {},
+  histCache: {}, // key -> {points, fetchedAt} — 기본 24개월 FRED 데이터를 localStorage에 같이 저장해 새로고침해도 재사용
   fomcMeetings: {}, fomcActiveKey: null, fomcPathFilter: {},
   fomcOpen: true,
   settingsOpen:true, lastUpdate:null,
@@ -486,6 +487,7 @@ async function load(){
       manualOverride:{...(saved.manualOverride||{})},
       manDate:{...(saved.manDate||{})},
       notes:{...(saved.notes||{})}, noteOpen:{...(saved.noteOpen||{})},
+      histCache:{...(saved.histCache||{})},
       fomcMeetings:{...(saved.fomcMeetings||{})}, fomcActiveKey: saved.fomcActiveKey||null,
       fomcPathFilter:{...(saved.fomcPathFilter||{})} };
       // migrate legacy single-meeting shape (pre multi-meeting update)
@@ -619,21 +621,52 @@ async function fetchFredPoints(fetchKey, {from, to, freq}={}){
   return payload.points||[];
 }
 
-// 패널을 처음 열 때 딱 한 번, 최근 24개월치만 가져옵니다 (대부분 2년 이내 데이터만 보시니 충분하고,
-// 예전처럼 시리즈 시작일부터 전체를 매번 새로 받아오지 않아 훨씬 빠릅니다).
+// 기준 시작일 — 이 날짜부터 오늘까지는 "처음 한 번만" 전체를 받아서 저장해두고,
+// 그 이후로는 24시간마다 마지막 저장 시점 이후의 "새 데이터만" 받아서 이어붙입니다.
+const BASE_HISTORY_START = '2025-01-01';
+const HIST_CACHE_TTL_MS = 24*60*60*1000; // 24시간
+
+// 날짜(t) 기준으로 합치기 — 같은 날짜가 겹치면 새로 받은 값으로 덮어씁니다 (통계 수정치 반영).
+function mergeHistPoints(oldPts, newPts){
+  const map = new Map();
+  (oldPts||[]).forEach(p=> map.set(p.t, p.v));
+  (newPts||[]).forEach(p=> map.set(p.t, p.v));
+  return Array.from(map.entries()).sort((a,b)=>a[0].localeCompare(b[0])).map(([t,v])=>({t,v}));
+}
+
 async function queryBaseHistory(key){
   const fetchKey = historyFetchKey(key);
   if(!FRED_HISTORY_KEYS.has(fetchKey)) return;
   if(FRED_HIST_CACHE[key] && (FRED_HIST_CACHE[key].loading || FRED_HIST_CACHE[key].points)) return;
-  FRED_HIST_CACHE[key] = {loading:true, error:null, points:null};
+  const persisted = S.histCache[key];
+  const hasPersisted = persisted && persisted.points && persisted.points.length;
+  if(hasPersisted && (Date.now()-persisted.fetchedAt) < HIST_CACHE_TTL_MS){
+    FRED_HIST_CACHE[key] = {points: persisted.points, loading:false, error:null};
+    render();
+    return;
+  }
+  FRED_HIST_CACHE[key] = {loading:true, error:null, points: hasPersisted ? persisted.points : null};
   render();
   try{
-    const d = new Date(); d.setDate(d.getDate()-730); // 24개월
-    const fromStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    const points = await fetchFredPoints(fetchKey, {from: fromStr, freq:'d'});
-    FRED_HIST_CACHE[key] = {points, loading:false, error:null};
+    let fromStr = BASE_HISTORY_START;
+    if(hasPersisted){
+      // 이미 2025.1월부터 저장돼 있으면, 전체를 다시 받지 않고 마지막 저장 시점에서 10일 정도
+      // 여유 있게 겹쳐서(재발표·수정 대비) 그 이후분만 새로 받아 이어붙입니다.
+      const last = persisted.points[persisted.points.length-1].t;
+      const d = new Date(last); d.setDate(d.getDate()-10);
+      fromStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    const newPoints = await fetchFredPoints(fetchKey, {from: fromStr, freq:'d'});
+    const merged = hasPersisted ? mergeHistPoints(persisted.points, newPoints) : newPoints;
+    FRED_HIST_CACHE[key] = {points: merged, loading:false, error:null};
+    S.histCache[key] = {points: merged, fetchedAt: Date.now()}; save();
   }catch(e){
-    FRED_HIST_CACHE[key] = {points:null, loading:false, error:String(e.message||e)};
+    // 새로 받아오는 데 실패했을 때, 기간이 좀 지났더라도 저장된 캐시가 있으면 그거라도 보여줍니다.
+    if(hasPersisted){
+      FRED_HIST_CACHE[key] = {points: persisted.points, loading:false, error:null};
+    } else {
+      FRED_HIST_CACHE[key] = {points:null, loading:false, error:String(e.message||e)};
+    }
   }
   render();
 }
