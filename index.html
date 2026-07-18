@@ -730,8 +730,8 @@ function renderTrendSVG(hist, i){
   // 예상치(수기 입력 시 같이 저장된 e값)가 있는 지점만 이어서 노란 점선으로 표시 — 결과값과 얼마나 근접했는지 한눈에 비교하기 위함
   const expIdxPts = hist.map((p,idx)=> (p.e!=null && !isNaN(p.e)) ? {idx, v:p.e} : null).filter(Boolean);
   const expPtsStr = expIdxPts.map(o=>`${xAt(o.idx).toFixed(1)},${yAt(o.v).toFixed(1)}`).join(' ');
-  const expLine = expIdxPts.length>=2 ? `<polyline points="${expPtsStr}" fill="none" style="stroke:#E8C547;stroke-width:2;stroke-dasharray:5,3;stroke-linejoin:round;stroke-linecap:round"/>` : '';
-  const expDots = expIdxPts.map(o=>`<circle cx="${xAt(o.idx).toFixed(1)}" cy="${yAt(o.v).toFixed(1)}" r="3" style="fill:#E8C547;stroke:var(--panel);stroke-width:1"></circle>`).join('');
+  const expLine = expIdxPts.length>=2 ? `<polyline points="${expPtsStr}" fill="none" style="stroke:#E8C547;stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round"/>` : '';
+  const expDots = expIdxPts.map(o=>`<circle cx="${xAt(o.idx).toFixed(1)}" cy="${yAt(o.v).toFixed(1)}" r="3.6" class="trend-dot" style="fill:#E8C547;stroke:var(--panel);stroke-width:1" data-tt="${hist[o.idx].t} · 예상 ${round(o.v,3)}${unit}${(hist[o.idx].v!=null&&!isNaN(hist[o.idx].v))?' · 결과 '+round(hist[o.idx].v,3)+unit:''}"></circle>`).join('');
   const legendHtml = expIdxPts.length ? `<div class="trend-legend"><span><span class="lg-dot lg-actual"></span>결과</span><span><span class="lg-dot lg-forecast"></span>예상치</span></div>` : '';
   const first=hist[0], last=hist[hist.length-1];
   const delta = last.v-first.v;
