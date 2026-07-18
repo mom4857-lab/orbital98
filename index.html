@@ -614,7 +614,17 @@ async function fetchFredPoints(fetchKey, {from, to, freq}={}){
   const params = new URLSearchParams({key:fetchKey, freq: freq||'d'});
   if(from) params.set('from', from);
   if(to) params.set('to', to);
-  const resp = await fetch(`/api/fred-history?${params.toString()}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(()=> controller.abort(), 15000); // 15초 안에 응답 없으면 중단
+  let resp;
+  try{
+    resp = await fetch(`/api/fred-history?${params.toString()}`, {signal: controller.signal});
+  }catch(e){
+    if(e.name === 'AbortError') throw new Error('응답 지연 (15초 초과) — 다시 시도해주세요');
+    throw e;
+  }finally{
+    clearTimeout(timeoutId);
+  }
   if(!resp.ok){
     const errPayload = await resp.json().catch(()=>({}));
     const msg = (errPayload.error || ('http-'+resp.status)) + (errPayload.detail ? ' — '+errPayload.detail : '');
