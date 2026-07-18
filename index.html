@@ -164,6 +164,10 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
 .trend-panel{margin-top:8px;padding:18px;border:1px dashed var(--border);border-radius:12px;background:var(--panel-2)}
 .trend-svg{width:100%;height:240px;display:block}
 .trend-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px;font-weight:600}
+.trend-legend{display:flex;gap:14px;font-size:11px;color:var(--muted);margin-top:6px}
+.lg-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+.lg-actual{background:var(--accent)}
+.lg-forecast{background:#E8C547}
 .trend-empty{font-size:11.5px;color:var(--faint);line-height:1.6;padding:8px 2px}
 .freq-row{display:flex;gap:6px;margin-bottom:10px}
 .freq-tab{font-size:11px;font-weight:700;padding:5px 11px;border-radius:8px;border:1px solid var(--border);
@@ -694,7 +698,8 @@ function renderTrendSVG(hist, i){
   const showBands = i.mode!=='change';
   const bands = showBands ? getBands(i) : [];
   const vals = hist.map(p=>p.v);
-  let lo=Math.min(...vals), hi=Math.max(...vals);
+  const expVals = hist.filter(p=>p.e!=null && !isNaN(p.e)).map(p=>p.e);
+  let lo=Math.min(...vals, ...(expVals.length?expVals:[vals[0]])), hi=Math.max(...vals, ...(expVals.length?expVals:[vals[0]]));
   bands.forEach(b=>{ if(b.min!=null && b.min>lo-1e9) lo=Math.min(lo,b.min); if(b.max!=null) hi=Math.max(hi,b.max); });
   if(lo===hi){ lo-=1; hi+=1; }
   const pad=(hi-lo)*0.18||1; lo-=pad; hi+=pad;
@@ -721,7 +726,13 @@ function renderTrendSVG(hist, i){
   const gradId = `tg${(__trendSeq++)}`;
   const pts = hist.map((p,idx)=>`${xAt(idx).toFixed(1)},${yAt(p.v).toFixed(1)}`).join(' ');
   const areaPts = `${padL.toFixed(1)},${(padT+innerH).toFixed(1)} ${pts} ${(padL+innerW).toFixed(1)},${(padT+innerH).toFixed(1)}`;
-  const dots = hist.map((p,idx)=>`<circle cx="${xAt(idx).toFixed(1)}" cy="${yAt(p.v).toFixed(1)}" r="3.6" class="trend-dot" data-tt="${p.t} · ${round(p.v,3)}${unit}"></circle>`).join('');
+  const dots = hist.map((p,idx)=>`<circle cx="${xAt(idx).toFixed(1)}" cy="${yAt(p.v).toFixed(1)}" r="3.6" class="trend-dot" data-tt="${p.t} · 결과 ${round(p.v,3)}${unit}${(p.e!=null&&!isNaN(p.e))?' · 예상 '+round(p.e,3)+unit:''}"></circle>`).join('');
+  // 예상치(수기 입력 시 같이 저장된 e값)가 있는 지점만 이어서 노란 점선으로 표시 — 결과값과 얼마나 근접했는지 한눈에 비교하기 위함
+  const expIdxPts = hist.map((p,idx)=> (p.e!=null && !isNaN(p.e)) ? {idx, v:p.e} : null).filter(Boolean);
+  const expPtsStr = expIdxPts.map(o=>`${xAt(o.idx).toFixed(1)},${yAt(o.v).toFixed(1)}`).join(' ');
+  const expLine = expIdxPts.length>=2 ? `<polyline points="${expPtsStr}" fill="none" style="stroke:#E8C547;stroke-width:2;stroke-dasharray:5,3;stroke-linejoin:round;stroke-linecap:round"/>` : '';
+  const expDots = expIdxPts.map(o=>`<circle cx="${xAt(o.idx).toFixed(1)}" cy="${yAt(o.v).toFixed(1)}" r="3" style="fill:#E8C547;stroke:var(--panel);stroke-width:1"></circle>`).join('');
+  const legendHtml = expIdxPts.length ? `<div class="trend-legend"><span><span class="lg-dot lg-actual"></span>결과</span><span><span class="lg-dot lg-forecast"></span>예상치</span></div>` : '';
   const first=hist[0], last=hist[hist.length-1];
   const delta = last.v-first.v;
   const trendColor = delta>=0? 'var(--buy)':'var(--sell)';
@@ -735,10 +746,13 @@ function renderTrendSVG(hist, i){
     ${gridSvg}
     <polygon points="${areaPts}" style="fill:url(#${gradId})"/>
     <polyline points="${pts}" fill="none" style="stroke:var(--accent);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round"/>
+    ${expLine}
     ${dots}
+    ${expDots}
     <text x="${firstX}" y="${H-9}" font-size="10" text-anchor="start" style="fill:var(--faint)">${first.t}</text>
     <text x="${lastX}" y="${H-9}" font-size="10" text-anchor="end" style="fill:var(--faint)">${last.t}</text>
   </svg>
+  ${legendHtml}
   <div class="trend-meta"><span>${hist.length}개 기록${unit?` · 단위 ${unit}`:''}</span><span style="color:${trendColor}">${delta>=0?'▲':'▼'} ${Math.abs(round(delta,3))}${unit} (선택 기간 변화)</span></div>`;
 }
 
