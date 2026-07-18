@@ -435,8 +435,8 @@ const INDICATORS = [
   {key:'shiller', cat:'sent', name:'쉴러 PER (S&P)', unit:'', freq:'월1회', mode:'band', manualEntry:true, val:36,
    src:'https://www.gurufocus.com/economic_indicators/56/shiller-pe', desc:'20~30 저평가(매수) / 30~40 중립 / 40↑ 역사적 고점(매도)',
    bands:[{min:null,max:30,sig:'buy'},{min:30,max:40,sig:'neu'},{min:40,max:null,sig:'sell'}]},
-  {key:'retail', cat:'sent', name:'소매 판매(MoM%)', unit:'%', freq:'월1회', mode:'band', manualEntry:true, val:0,
-   src:'https://kr.investing.com/economic-calendar/retail-sales-256', desc:'전월대비 증감. 예상 상회 → 소비·경기 긍정(매수)',
+  {key:'retail', cat:'sent', name:'소매 판매(MoM%)', unit:'%', freq:'월1회', mode:'band', val:0,
+   src:'https://kr.investing.com/economic-calendar/retail-sales-256', desc:'전월대비 증감. 예상 상회 → 소비·경기 긍정(매수)', expect:true,
    bands:[{min:null,max:-0.0001,sig:'sell'},{min:-0.0001,max:0.0001,sig:'neu'},{min:0.0001,max:null,sig:'buy'}]},
 
   // FOMC (점도표 카드 우측 상단에서 직접 판단해 입력 — 자동계산 없음)
