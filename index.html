@@ -576,6 +576,28 @@ function isFredBacked(key){
   return !!(ind && ind.historySource);
 }
 
+// 전월비/전년비 계산 전용 캐시 — 사용자가 차트 표시 기간을 좁게 잡아도(예: 26.1~26.7)
+// 항상 최근 ~14개월치를 별도로 가져와서 정확히 계산할 수 있도록 표시 범위와 분리해서 관리합니다.
+const RATE_CACHE = {}; // key -> {points, loading, error}
+async function queryRateData(key){
+  const fetchKey = historyFetchKey(key);
+  if(!FRED_HISTORY_KEYS.has(fetchKey)) return;
+  if(RATE_CACHE[key] && (RATE_CACHE[key].loading || RATE_CACHE[key].points)) return; // 이미 로딩중이거나 가져온 적 있으면 재요청 안함
+  RATE_CACHE[key] = {loading:true, error:null, points:null};
+  try{
+    const d = new Date(); d.setDate(d.getDate()-425);
+    const fromStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const params = new URLSearchParams({key:fetchKey, freq:'d', from:fromStr});
+    const resp = await fetch(`/api/fred-history?${params.toString()}`);
+    if(!resp.ok) throw new Error('http-'+resp.status);
+    const payload = await resp.json();
+    RATE_CACHE[key] = {points: payload.points||[], loading:false, error:null};
+  }catch(e){
+    RATE_CACHE[key] = {points:null, loading:false, error:String(e.message||e)};
+  }
+  render();
+}
+
 async function queryTrend(key){
   const fetchKey = historyFetchKey(key);
   if(!FRED_HISTORY_KEYS.has(fetchKey)){ render(); return; } // 수기입력 지표는 로컬 기록이라 즉시 재렌더만 하면 됨
@@ -603,7 +625,7 @@ async function queryTrend(key){
 
 
 let __trendSeq = 0;
-function renderTrendSVG(hist, i){
+function renderTrendSVG(hist, i, rateInfo){
   const W=680,H=240,padL=60,padR=20,padT=22,padB=34;
   const innerW=W-padL-padR, innerH=H-padT-padB;
   // 전월/전주比(%) 기준 구간은 레벨값 그래프와 척도가 달라 표시하지 않음
@@ -642,6 +664,17 @@ function renderTrendSVG(hist, i){
   const delta = last.v-first.v;
   const trendColor = delta>=0? 'var(--buy)':'var(--sell)';
   const firstX = Math.max(xAt(0), padL+18), lastX = Math.min(xAt(hist.length-1), W-padR-18);
+  // 마지막 데이터 포인트 바로 위에 전월비/전년비를 직접 라벨로 표시 (표시 기간과 무관하게 항상 최신 기준으로 계산됨)
+  let rateAnnotation = '';
+  if(rateInfo && (rateInfo.mom!=null || rateInfo.yoy!=null)){
+    const fmt = v => v==null ? '—' : `${v>0?'+':''}${v}%`;
+    const clr = v => v==null ? 'var(--muted)' : (v>0?'var(--buy)':(v<0?'var(--sell)':'var(--muted)'));
+    const lastY = yAt(last.v);
+    const y2 = Math.max(lastY-16, padT+10);
+    const y1 = Math.max(y2-13, padT+10);
+    rateAnnotation = `<text x="${lastX}" y="${y1.toFixed(1)}" font-size="10.5" font-weight="600" text-anchor="end" style="fill:${clr(rateInfo.mom)}">전월 ${fmt(rateInfo.mom)}</text>
+      <text x="${lastX}" y="${y2.toFixed(1)}" font-size="10.5" font-weight="600" text-anchor="end" style="fill:${clr(rateInfo.yoy)}">전년 ${fmt(rateInfo.yoy)}</text>`;
+  }
   return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" preserveAspectRatio="xMidYMid meet">
     <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="var(--accent)" stop-opacity=".35"/>
@@ -652,6 +685,7 @@ function renderTrendSVG(hist, i){
     <polygon points="${areaPts}" style="fill:url(#${gradId})"/>
     <polyline points="${pts}" fill="none" style="stroke:var(--accent);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round"/>
     ${dots}
+    ${rateAnnotation}
     <text x="${firstX}" y="${H-9}" font-size="10" text-anchor="start" style="fill:var(--faint)">${first.t}</text>
     <text x="${lastX}" y="${H-9}" font-size="10" text-anchor="end" style="fill:var(--faint)">${last.t}</text>
   </svg>
@@ -710,9 +744,27 @@ function calcYoyMom(pts){
   const yoy = (yoyPt && yoyPt.v!==0) ? round((latest.v-yoyPt.v)/Math.abs(yoyPt.v)*100,2) : null;
   return {mom, yoy, latestDate: latest.t};
 }
-function rateHtml(i, pts){
+// 전월비/전년비는 항상 "화면에 표시 중인 기간"과 무관하게 계산됩니다 —
+// FRED 자동지표는 RATE_CACHE(항상 최근 14개월 별도 조회)를, 수기입력(MMF 등)은 저장된 전체 기록을 사용합니다.
+function getRateInfo(i){
+  if(!i.rateDisplay) return null;
+  if(isFredBacked(i.key)){
+    const cache = RATE_CACHE[i.key];
+    if(!cache || cache.loading || cache.error || !cache.points) return null;
+    let pts = cache.points.filter(p=>p.v!=null && !isNaN(p.v));
+    if(i.historySource) pts = pts.map(p=>({t:p.t, v: round(p.v - S.baseRate, 2)}));
+    return calcYoyMom(pts);
+  }
+  const pts = (S.history[i.key]||[]).filter(p=>p.v!=null && !isNaN(p.v));
+  return calcYoyMom(pts);
+}
+function rateHtml(i){
   if(!i.rateDisplay) return '';
-  const r = calcYoyMom(pts);
+  if(isFredBacked(i.key)){
+    const cache = RATE_CACHE[i.key];
+    if(!cache || cache.loading) return `<div class="rate-badges"><span class="rate-badge">전월비·전년비 계산 중…</span></div>`;
+  }
+  const r = getRateInfo(i);
   if(!r) return '';
   const fmtPct = v => v==null ? '데이터 부족' : `${v>0?'+':''}${v}%`;
   const cls = v => v==null?'':(v>0?'up':(v<0?'down':''));
@@ -730,7 +782,7 @@ function buildTrendChart(i){
     let pts = (cache.points||[]).filter(p=>p.v!=null && !isNaN(p.v));
     if(i.historySource) pts = pts.map(p=>({t:p.t, v: round(p.v - S.baseRate, 2)}));
     if(pts.length<2) return `<div class="trend-empty">선택한 기간에 데이터가 없습니다. 기간을 넓혀서 다시 조회해보세요.</div>`;
-    return rateHtml(i, pts) + renderTrendSVG(pts, i);
+    return rateHtml(i) + renderTrendSVG(pts, i, getRateInfo(i));
   }
   const fullHist = (S.history[i.key]||[]).filter(p=>p.v!=null && !isNaN(p.v)).sort((a,b)=>a.t.localeCompare(b.t));
   const range = S.trendRange[i.key];
@@ -741,7 +793,7 @@ function buildTrendChart(i){
   if(hist.length<2){
     chartHtml = `<div class="trend-empty">${(S.history[i.key]||[]).length? '선택한 기간에 데이터가 부족합니다. 기간을 넓혀보세요.' : '추세 데이터가 없습니다. 위 "결과" 칸에 값과 날짜를 입력하고 "저장"을 누르면 기록이 쌓입니다.'}</div>`;
   } else {
-    chartHtml = rateHtml(i, fullHist) + renderTrendSVG(hist, i);
+    chartHtml = rateHtml(i) + renderTrendSVG(hist, i, getRateInfo(i));
   }
   return chartHtml + histEditableList(i);
 }
@@ -1163,9 +1215,9 @@ function indRow(i){
     const isFred = isFredBacked(i.key);
     const rangeRow = el(`<div class="range-row">
       <span>기간</span>
-      <input type="date" data-trendfrom="${i.key}" value="${range.from||''}">
+      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" data-trendfrom="${i.key}" value="${range.from||''}">
       <span>~</span>
-      <input type="date" data-trendto="${i.key}" value="${range.to||''}">
+      <input type="text" inputmode="numeric" maxlength="10" placeholder="YYYY-MM-DD" data-trendto="${i.key}" value="${range.to||''}">
       <button class="btn ghost" data-trendreset="${i.key}">전체 기간</button>
       <button class="btn primary" data-trendquery="${i.key}">조회</button>
     </div>`);
@@ -1246,7 +1298,7 @@ function bind(){
     save(); render();
   }));
   // 날짜 텍스트 입력 자동 포맷팅 (YYYY-MM-DD) — 네이티브 date input의 모바일 세그먼트 이동/화살표 오류 회피
-  document.querySelectorAll('[data-exdate], [data-mandate]').forEach(inp=> inp.addEventListener('input',e=>{
+  document.querySelectorAll('[data-exdate], [data-mandate], [data-trendfrom], [data-trendto]').forEach(inp=> inp.addEventListener('input',e=>{
     const digits = e.target.value.replace(/[^0-9]/g,'').slice(0,8);
     let out = digits.slice(0,4);
     if(digits.length>4) out += '-' + digits.slice(4,6);
@@ -1375,6 +1427,7 @@ function bind(){
     const k=b.dataset.trendtoggle; const opening=!S.trendOpen[k];
     S.trendOpen[k]=opening; save(); render();
     if(opening && isFredBacked(k) && !FRED_HIST_CACHE[k]) queryTrend(k);
+    if(opening){ const ind=INDICATORS.find(x=>x.key===k); if(ind && ind.rateDisplay) queryRateData(k); }
   });
   document.querySelectorAll('[data-notetoggle]').forEach(b=> b.onclick=()=>{
     const k=b.dataset.notetoggle; S.noteOpen[k]=!S.noteOpen[k]; save(); render();
