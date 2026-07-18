@@ -583,6 +583,62 @@ function overall(){
   return {score, verdict, cls, B, N, Se};
 }
 
+// 지금 이 대시보드 상태를 통째로 텍스트(마크다운)로 요약 — Claude 등에 붙여넣어 경제 상황 분석을 요청할 때 쓰기 위한 용도.
+function buildExportText(){
+  const ov = overall();
+  const now = new Date();
+  const stamp = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  let out = `# ORBITAL 경제지표 스냅샷 — ${stamp}\n\n`;
+  out += `- 기준금리: ${S.baseRate}%\n`;
+  out += `- 데이터 기준: ${S.asOf}${S.lastUpdate?` · 최근 갱신 ${S.lastUpdate}`:''}\n`;
+  out += `- 종합 가중 점수: ${ov.score>=0?'+':''}${ov.score.toFixed(2)} (−1~+1) → **${ov.verdict}**\n`;
+  out += `- 신호 분포: 매수 ${ov.B} · 중립 ${ov.N} · 매도 ${ov.Se}\n\n`;
+
+  out += `## 카테고리별 요약\n`;
+  CATS.forEach(c=>{
+    const cs = catScore(c.key);
+    const w = S.weights[c.key];
+    if(cs.score===null){ out += `- ${c.name} (가중치 ${w}): 데이터 없음\n`; return; }
+    out += `- ${c.name} (가중치 ${w}): 평균 ${cs.score>=0?'+':''}${cs.score.toFixed(2)} · 매수${cs.b} 중립${cs.nu} 매도${cs.s}\n`;
+  });
+  out += `\n## 지표 상세\n`;
+
+  CATS.forEach(c=>{
+    const items = INDICATORS.filter(i=>i.cat===c.key);
+    if(!items.length) return;
+    out += `\n### ${c.name}\n`;
+    items.forEach(i=>{
+      const sig = indSignal(i);
+      const v = indValue(i);
+      const sigLabel = sig==='off' ? '제외' : SIG[sig];
+      const ov2 = S.manualOverride[i.key];
+      const isOv = ov2 && ov2!=='auto';
+      const flagTag = isOv ? ' (수동 재정의)' : (i.mode==='manual' ? ' (수기 입력)' : '');
+      let line = `- **${i.name}** [${sigLabel}]${flagTag}: ${v==null||isNaN(v)?'—':fmt(v,i.unit)}${i.unit||''}`;
+      const chg = S.chgs[i.key];
+      if(chg!=null && !isNaN(chg) && i.mode!=='derived') line += ` (전월/전주比 ${chg>=0?'+':''}${(chg*100).toFixed(1)}%)`;
+      out += line + '\n';
+      if(i.expect){
+        const ex = S.expect[i.key];
+        if(ex && (ex.r || ex.e)) out += `  - 최근 결과/예상: 결과 ${ex.r||'—'} / 예상 ${ex.e||'—'} (${ex.d||'날짜 미입력'})\n`;
+      }
+      if(S.notes[i.key]) out += `  - 한줄 메모: ${S.notes[i.key]}\n`;
+      if(S.memo[i.key]) out += `  - 메모장: ${S.memo[i.key].replace(/\n/g,' / ')}\n`;
+      const hist = (S.history[i.key]||[]).slice(-5);
+      if(hist.length) out += `  - 최근 기록: ${hist.map(p=>`${p.t}=${round(p.v,3)}`).join(', ')}\n`;
+    });
+  });
+  return out;
+}
+function downloadText(filename, text){
+  const blob = new Blob([text], {type:'text/markdown;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=> URL.revokeObjectURL(url), 1000);
+}
+
 //============================ RENDER ============================//
 const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild;};
 const escHtml = (s)=> String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -1090,6 +1146,7 @@ function render(){
       </div>
       <div class="top-actions">
         <button class="btn primary" id="ai-btn">⟳ FRED 공식 데이터 갱신</button>
+        <button class="btn ghost" id="export-btn">📤 분석용 데이터 추출</button>
         <div class="status" id="status"></div>
       </div>
     </div>`));
@@ -1489,6 +1546,13 @@ function bind(){
     toast(`✓ ${d} 기록 삭제 완료`);
   });
   document.getElementById('ai-btn').onclick = aiUpdate;
+  document.getElementById('export-btn').onclick = async ()=>{
+    const text = buildExportText();
+    const stamp = `${S.asOf||'snapshot'}`.replace(/[^0-9a-zA-Z가-힣-]/g,'');
+    downloadText(`orbital-snapshot-${stamp}.md`, text);
+    try{ await navigator.clipboard.writeText(text); toast('✓ 파일 다운로드 + 클립보드 복사 완료'); }
+    catch(e){ toast('✓ 파일 다운로드 완료 (클립보드 복사는 실패)'); }
+  };
 
   // threshold (band) editor
   document.querySelectorAll('[data-bandtoggle]').forEach(b=> b.onclick=()=>{
