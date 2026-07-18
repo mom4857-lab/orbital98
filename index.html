@@ -315,6 +315,11 @@ select.sigsel option{background:var(--panel);color:var(--ink)}
 .note-row input{flex:1;min-width:0;font-size:12px;padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:var(--panel-2);color:var(--ink)}
 .note-display{font-size:12px;color:var(--muted);margin-top:4px}
 .has-note{opacity:1;color:var(--accent)}
+.memo-area{width:100%;min-height:38px;margin-top:8px;font-family:inherit;font-size:12px;line-height:1.5;
+  padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--ink);
+  resize:vertical;box-sizing:border-box}
+.memo-area:focus{outline:none;border-color:var(--accent);background:var(--panel)}
+.memo-area::placeholder{color:var(--faint)}
 
 /* weight inputs */
 .wnum{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;background:var(--panel);
@@ -485,6 +490,7 @@ const DEFAULT = () => ({
   manualOverride: {},
   manDate: {},
   notes: {}, noteOpen: {},
+  memo: {}, // 지표별 여러 줄 메모(현재 상황 기록용) — 한줄 메모(notes)와는 별개
   histCache: {}, // key -> {points, fetchedAt} — 기본 24개월 FRED 데이터를 localStorage에 같이 저장해 새로고침해도 재사용
   fomcMeetings: {}, fomcActiveKey: null, fomcPathFilter: {},
   fomcOpen: true,
@@ -505,6 +511,7 @@ async function load(){
       manualOverride:{...(saved.manualOverride||{})},
       manDate:{...(saved.manDate||{})},
       notes:{...(saved.notes||{})}, noteOpen:{...(saved.noteOpen||{})},
+      memo:{...(saved.memo||{})},
       histCache:{...(saved.histCache||{})},
       fomcMeetings:{...(saved.fomcMeetings||{})}, fomcActiveKey: saved.fomcActiveKey||null,
       fomcPathFilter:{...(saved.fomcPathFilter||{})} };
@@ -1193,7 +1200,7 @@ function indRow(i){
     </div><div class="right"></div></div>`);
   const right = row.querySelector('.right');
 
-  // 한줄 메모 — 📝 아이콘으로 열고 닫으며, 저장하면 이 지표에 계속 표시됩니다
+  // 한줄 메모 — 이 지표가 무엇인지 설명하는 간단한 메모. 📝 아이콘으로 열고 닫습니다.
   {
     const meta = row.querySelector('.meta');
     if(S.noteOpen[i.key]){
@@ -1204,6 +1211,12 @@ function indRow(i){
     } else if(S.notes[i.key]){
       meta.appendChild(el(`<div class="note-display">📝 ${escHtml(S.notes[i.key])}</div>`));
     }
+  }
+
+  // 메모장 — 지금 상황을 기록해두는 용도의 여러 줄 메모. 한줄 메모와는 별개이며, 항상 펼쳐져 있고 입력할 때마다 자동 저장됩니다.
+  {
+    const meta = row.querySelector('.meta');
+    meta.appendChild(el(`<textarea class="memo-area" placeholder="메모장 — 지금 상황 기록 (여러 줄 작성 가능)" data-memo="${i.key}" rows="2">${escHtml(S.memo[i.key]||'')}</textarea>`));
   }
 
   // expect fields (수기 결/예) — 날짜를 지정하고 "저장"을 누르면 그 날짜로 추세 기록에 누적됩니다
@@ -1530,6 +1543,10 @@ function bind(){
     toast('✓ 메모 저장 완료');
   });
   document.querySelectorAll('[data-note]').forEach(inp=> inp.addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();}));
+  // 메모장(여러 줄) — 입력할 때마다 자동 저장 (엔터는 textarea 기본 동작대로 줄바꿈됩니다)
+  document.querySelectorAll('[data-memo]').forEach(ta=> ta.addEventListener('input', e=>{
+    S.memo[e.target.dataset.memo] = e.target.value; save();
+  }));
   // 📅 오버레이 — 아이콘 위에 겹쳐진 진짜 date input을 클릭하면 그 자리에서 바로 달력이 뜨고,
   // 고른 날짜를 옆의 텍스트 입력창에 반영합니다 (기존 change 핸들러를 그대로 재사용).
   const syncOverlay = (nativeSel, textSel) => document.querySelectorAll(nativeSel).forEach(nativeInp=> nativeInp.addEventListener('change', e=>{
