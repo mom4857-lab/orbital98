@@ -291,6 +291,12 @@ select.sigsel{font-family:inherit;font-weight:700;font-size:12px;border-radius:9
   border-radius:7px;color:var(--ink);padding:5px 7px;color-scheme:dark}
 .cal-icon{background:none;border:none;cursor:pointer;font-size:12px;padding:2px 4px;line-height:1;opacity:.75}
 .cal-icon:hover{opacity:1}
+.rate-badges{display:flex;gap:14px;margin-bottom:10px;font-size:12px;color:var(--muted)}
+.rate-badges b{font-size:13px}
+.note-row{display:flex;gap:6px;align-items:center;margin-top:6px}
+.note-row input{flex:1;min-width:0;font-size:12px;padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:var(--panel-2);color:var(--ink)}
+.note-display{font-size:12px;color:var(--muted);margin-top:4px}
+.has-note{opacity:1;color:var(--accent)}
 
 /* weight inputs */
 .wnum{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;background:var(--panel);
@@ -352,7 +358,7 @@ const CATS = [
 // indicator definitions. mode: 'band' (level), 'change' (MoM%), 'manual', 'info'
 const INDICATORS = [
   // 금리
-  {key:'t10y2y', cat:'rate', name:'2-10년 금리차', unit:'%', freq:'매일', mode:'band', val:0.40, chg:-0.024,
+  {key:'t10y2y', cat:'rate', name:'10년-2년 금리차', unit:'%', freq:'매일', mode:'band', val:0.40, chg:-0.024,
    src:FRED('T10Y2Y'), desc:'장단기 금리차. 양(+)이면 정상, 역전(–)이면 침체 신호',
    bands:[{min:null,max:0,sig:'sell'},{min:0,max:0.5,sig:'neu'},{min:0.5,max:null,sig:'buy'}]},
   {key:'dgs10', cat:'rate', name:'10년물 국채금리', unit:'%', freq:'매일', mode:'band', val:4.51, chg:0.004,
@@ -360,12 +366,11 @@ const INDICATORS = [
    bands:[{min:null,max:4.0,sig:'buy'},{min:4.0,max:4.5,sig:'neu'},{min:4.5,max:null,sig:'sell'}]},
   {key:'dgs2', cat:'rate', name:'2년물 국채금리', unit:'%', freq:'매일', mode:'info', val:4.11, chg:0.0074,
    src:FRED('DGS2'), desc:'기준선 미설정 시 참고용 — 아래 "2년물−기준금리" 파생 계산에도 사용됩니다', bands:[]},
-  {key:'dgs10base', cat:'rate', name:'10년물 − 기준금리', unit:'%p', freq:'매일', mode:'derived', val:null, chg:null,
-   src:FRED('DGS10'), desc:'정상 우상향(+1%↑) = 성장·물가통제 양호 / 음수 = 경기둔화 우려',
-   derive:s=>round(s.vals.dgs10 - s.baseRate,2),
+  {key:'dgs10base', cat:'rate', name:'10년물 − 기준금리', unit:'%p', freq:'매일', mode:'band', val:0.76, chg:null,
+   src:'https://fred.stlouisfed.org/series/T10YFF', desc:'정상 우상향(+1%↑) = 성장·물가통제 양호 / 음수 = 경기둔화 우려 (FRED T10YFF 공식 시리즈)',
    bands:[{min:null,max:0,sig:'sell'},{min:0,max:0.5,sig:'neu'},{min:0.5,max:null,sig:'buy'}]},
-  {key:'dgs2base', cat:'rate', name:'2년물 − 기준금리', unit:'%p', freq:'매일', mode:'derived', val:null, chg:null,
-   src:FRED('DGS2'), desc:'−0.25%↓ = 인하 선반영(긍정) / +0.25%↑ = 인상 우려',
+  {key:'dgs2base', cat:'rate', name:'2년물 − 기준금리', unit:'%p', freq:'매일', mode:'derived', val:null, chg:null, historySource:'dgs2',
+   src:FRED('DGS2'), desc:'−0.25%↓ = 인하 선반영(긍정) / +0.25%↑ = 인상 우려 (2년물은 FRED 자동, 기준금리는 현재값 기준 계산)',
    derive:s=>round(s.vals.dgs2 - s.baseRate,2),
    bands:[{min:null,max:-0.25,sig:'buy'},{min:-0.25,max:0.25,sig:'neu'},{min:0.25,max:null,sig:'sell'}]},
   {key:'dgs30', cat:'rate', name:'30년물 국채금리', unit:'%', freq:'매일', mode:'info', val:5.00, chg:0.002,
@@ -393,19 +398,19 @@ const INDICATORS = [
    bands:[{min:null,max:48,sig:'sell'},{min:48,max:52,sig:'neu'},{min:52,max:null,sig:'buy'}]},
 
   // 유동성 (FRED 자동 + 전월비 기반)
-  {key:'m2', cat:'liq', name:'M2 통화량', unit:'십억$', freq:'월1회', mode:'change', val:22804.5, chg:0.005,
+  {key:'m2', cat:'liq', name:'M2 통화량', unit:'십억$', freq:'월1회', mode:'change', val:22804.5, chg:0.005, rateDisplay:true,
    src:FRED('M2SL'), desc:'전월比 증가 → 유동성↑ 자산상승(매수) / 감소 → 위험자산 압력',
    bands:[{min:null,max:-0.001,sig:'sell'},{min:-0.001,max:0.001,sig:'neu'},{min:0.001,max:null,sig:'buy'}]},
-  {key:'walcl', cat:'liq', name:'연준 대차대조표', unit:'억$', freq:'주1회', mode:'change', val:67253.97, chg:0.002,
+  {key:'walcl', cat:'liq', name:'연준 대차대조표', unit:'억$', freq:'주1회', mode:'change', val:67253.97, chg:0.002, rateDisplay:true,
    src:FRED('WALCL'), desc:'증가=QE(돈 풀기, 매수) / 감소=QT(긴축, 매도)',
    bands:[{min:null,max:-0.001,sig:'sell'},{min:-0.001,max:0.001,sig:'neu'},{min:0.001,max:null,sig:'buy'}]},
-  {key:'tga', cat:'liq', name:'TGA 잔고', unit:'억$', freq:'주1회', mode:'change', val:8281.22, chg:-0.054,
+  {key:'tga', cat:'liq', name:'TGA 잔고', unit:'억$', freq:'주1회', mode:'change', val:8281.22, chg:-0.054, rateDisplay:true,
    src:FRED('WTREGEN'), desc:'정부계좌. 감소=지출↑ 유동성공급(매수) / 증가=자금흡수(매도)',
    bands:[{min:null,max:-0.001,sig:'buy'},{min:-0.001,max:0.001,sig:'neu'},{min:0.001,max:null,sig:'sell'}]},
-  {key:'rrp', cat:'liq', name:'역레포(RRP)', unit:'십억$', freq:'월1회', mode:'change', val:3.998, chg:1.608,
+  {key:'rrp', cat:'liq', name:'역레포(RRP)', unit:'십억$', freq:'월1회', mode:'change', val:3.998, chg:1.608, rateDisplay:true,
    src:FRED('RRPONTSYD'), desc:'감소=자금 시장유입(매수) / 증가=위험회피(매도)',
    bands:[{min:null,max:-0.001,sig:'buy'},{min:-0.001,max:0.001,sig:'neu'},{min:0.001,max:null,sig:'sell'}]},
-  {key:'mmf', cat:'liq', name:'MMF 잔액', unit:'조$', freq:'주1회', mode:'band', manualEntry:true, val:6.8,
+  {key:'mmf', cat:'liq', name:'MMF 잔액', unit:'조$', freq:'주1회', mode:'band', manualEntry:true, val:6.8, rateDisplay:true,
    src:'https://www.ici.org/research/stats/mmf', desc:'ICI 발표. 감소추세=대기자금 증시유입(매수) / 5.5↓ 매수 / 5.5~7 중립 / 7↑ 리스크회피(매도)',
    bands:[{min:null,max:5.5,sig:'buy'},{min:5.5,max:7.0,sig:'neu'},{min:7.0,max:null,sig:'sell'}]},
 
@@ -458,6 +463,7 @@ const DEFAULT = () => ({
   history: {}, trendOpen: {}, trendRange: {}, trendFreq: {},
   manualOverride: {},
   manDate: {},
+  notes: {}, noteOpen: {},
   fomcMeetings: {}, fomcActiveKey: null, fomcPathFilter: {},
   fomcOpen: true,
   settingsOpen:true, lastUpdate:null,
@@ -476,6 +482,7 @@ async function load(){
       trendFreq:{...(saved.trendFreq||{})},
       manualOverride:{...(saved.manualOverride||{})},
       manDate:{...(saved.manDate||{})},
+      notes:{...(saved.notes||{})}, noteOpen:{...(saved.noteOpen||{})},
       fomcMeetings:{...(saved.fomcMeetings||{})}, fomcActiveKey: saved.fomcActiveKey||null,
       fomcPathFilter:{...(saved.fomcPathFilter||{})} };
       // migrate legacy single-meeting shape (pre multi-meeting update)
@@ -548,22 +555,36 @@ function overall(){
 
 //============================ RENDER ============================//
 const el = (h)=>{const t=document.createElement('template');t.innerHTML=h.trim();return t.content.firstChild;};
+const escHtml = (s)=> String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const sigCls = s=>({buy:'s-buy',neu:'s-neu',sell:'s-sell',off:'s-off'}[s]);
 function fmt(v,unit){ if(v==null||isNaN(v)) return '—'; let n = Math.abs(v)>=1000? v.toLocaleString('en-US',{maximumFractionDigits:0}) : v.toString(); return n; }
 
 // FRED 공식 API로 실제 과거 데이터를 조회할 수 있는 지표 키 (worker.js의 SERIES와 동일 — base_rate 제외)
-const FRED_HISTORY_KEYS = new Set(['t10y2y','dgs10','dgs2','dgs30','wti','brent','hyspread','m2','walcl','tga','rrp']);
+const FRED_HISTORY_KEYS = new Set(['t10y2y','dgs10','dgs2','dgs30','wti','brent','hyspread','m2','walcl','tga','rrp','dgs10base']);
 // FRED 과거 데이터 조회 결과 캐시 (저장하지 않음 — 새로고침 시 다시 조회)
 const FRED_HIST_CACHE = {}; // key -> {points:[{t,v}], freq, loading, error}
 
+// historySource가 설정된 파생 지표(예: 2년물−기준금리)는 실제 FRED 조회 시
+// 그 원본 지표(예: dgs2)의 시리즈를 대신 요청합니다 — 캐시는 파생 키 자체에 별도 보관.
+function historyFetchKey(key){
+  const ind = INDICATORS.find(x=>x.key===key);
+  return (ind && ind.historySource) || key;
+}
+function isFredBacked(key){
+  if(FRED_HISTORY_KEYS.has(key)) return true;
+  const ind = INDICATORS.find(x=>x.key===key);
+  return !!(ind && ind.historySource);
+}
+
 async function queryTrend(key){
-  if(!FRED_HISTORY_KEYS.has(key)){ render(); return; } // 수기입력 지표는 로컬 기록이라 즉시 재렌더만 하면 됨
+  const fetchKey = historyFetchKey(key);
+  if(!FRED_HISTORY_KEYS.has(fetchKey)){ render(); return; } // 수기입력 지표는 로컬 기록이라 즉시 재렌더만 하면 됨
   const range = S.trendRange[key]||{};
   const freq = S.trendFreq[key]||'d';
   FRED_HIST_CACHE[key] = {...(FRED_HIST_CACHE[key]||{}), loading:true, error:null};
   render();
   try{
-    const params = new URLSearchParams({key, freq});
+    const params = new URLSearchParams({key:fetchKey, freq});
     if(range.from) params.set('from', range.from);
     if(range.to) params.set('to', range.to);
     const resp = await fetch(`/api/fred-history?${params.toString()}`);
@@ -579,6 +600,7 @@ async function queryTrend(key){
   }
   render();
 }
+
 
 let __trendSeq = 0;
 function renderTrendSVG(hist, i){
@@ -667,25 +689,59 @@ function histEditableList(i){
     <button class="hist-list-toggle" data-histlisttoggle="${i.key}" style="float:right">▲ 접기</button></div>${rows}</div>`;
 }
 
+// 전월비/전년비 % 계산 — 히스토리 배열(t: 'YYYY-MM-DD', v: number)에서 최신값 기준 가장 가까운 -1개월/-1년 지점을 찾아 비교
+function calcYoyMom(pts){
+  const sorted = (pts||[]).filter(p=>p.v!=null && !isNaN(p.v)).slice().sort((a,b)=>a.t.localeCompare(b.t));
+  if(sorted.length<2) return null;
+  const latest = sorted[sorted.length-1];
+  const latestMs = new Date(latest.t).getTime();
+  const DAY = 86400000;
+  const findNear = (targetMs, maxDiffDays) => {
+    let best=null, bestDiff=Infinity;
+    sorted.forEach(p=>{
+      const diff = Math.abs(new Date(p.t).getTime() - targetMs);
+      if(diff<bestDiff){ bestDiff=diff; best=p; }
+    });
+    return (best && bestDiff <= maxDiffDays*DAY) ? best : null;
+  };
+  const momPt = findNear(latestMs - 30*DAY, 20);
+  const yoyPt = findNear(latestMs - 365*DAY, 60);
+  const mom = (momPt && momPt.v!==0) ? round((latest.v-momPt.v)/Math.abs(momPt.v)*100,2) : null;
+  const yoy = (yoyPt && yoyPt.v!==0) ? round((latest.v-yoyPt.v)/Math.abs(yoyPt.v)*100,2) : null;
+  return {mom, yoy, latestDate: latest.t};
+}
+function rateHtml(i, pts){
+  if(!i.rateDisplay) return '';
+  const r = calcYoyMom(pts);
+  if(!r) return '';
+  const fmtPct = v => v==null ? '데이터 부족' : `${v>0?'+':''}${v}%`;
+  const cls = v => v==null?'':(v>0?'up':(v<0?'down':''));
+  return `<div class="rate-badges">
+    <span class="rate-badge">전월비 <b class="${cls(r.mom)}">${fmtPct(r.mom)}</b></span>
+    <span class="rate-badge">전년비 <b class="${cls(r.yoy)}">${fmtPct(r.yoy)}</b></span>
+  </div>`;
+}
 function buildTrendChart(i){
-  if(FRED_HISTORY_KEYS.has(i.key)){
+  if(isFredBacked(i.key)){
     const cache = FRED_HIST_CACHE[i.key];
     if(!cache) return `<div class="trend-empty">"조회" 버튼을 누르면 FRED 공식 과거 데이터를 직접 가져옵니다.</div>`;
     if(cache.loading) return `<div class="trend-empty"><span class="spin"></span> FRED 과거 데이터 조회 중…</div>`;
     if(cache.error) return `<div class="trend-empty">조회 실패: ${cache.error} — 잠시 후 다시 시도해주세요.</div>`;
-    const pts = (cache.points||[]).filter(p=>p.v!=null && !isNaN(p.v));
+    let pts = (cache.points||[]).filter(p=>p.v!=null && !isNaN(p.v));
+    if(i.historySource) pts = pts.map(p=>({t:p.t, v: round(p.v - S.baseRate, 2)}));
     if(pts.length<2) return `<div class="trend-empty">선택한 기간에 데이터가 없습니다. 기간을 넓혀서 다시 조회해보세요.</div>`;
-    return renderTrendSVG(pts, i);
+    return rateHtml(i, pts) + renderTrendSVG(pts, i);
   }
+  const fullHist = (S.history[i.key]||[]).filter(p=>p.v!=null && !isNaN(p.v)).sort((a,b)=>a.t.localeCompare(b.t));
   const range = S.trendRange[i.key];
-  let hist = (S.history[i.key]||[]).filter(p=>p.v!=null && !isNaN(p.v)).sort((a,b)=>a.t.localeCompare(b.t));
+  let hist = fullHist;
   if(range && range.from) hist = hist.filter(p=>p.t>=range.from);
   if(range && range.to) hist = hist.filter(p=>p.t<=range.to);
   let chartHtml;
   if(hist.length<2){
     chartHtml = `<div class="trend-empty">${(S.history[i.key]||[]).length? '선택한 기간에 데이터가 부족합니다. 기간을 넓혀보세요.' : '추세 데이터가 없습니다. 위 "결과" 칸에 값과 날짜를 입력하고 "저장"을 누르면 기록이 쌓입니다.'}</div>`;
   } else {
-    chartHtml = renderTrendSVG(hist, i);
+    chartHtml = rateHtml(i, fullHist) + renderTrendSVG(hist, i);
   }
   return chartHtml + histEditableList(i);
 }
@@ -997,10 +1053,23 @@ function indRow(i){
     (i.mode==='derived'?`<span class="chg" style="color:var(--faint)">계산값</span>`:'');
 
   const row = el(`<div class="ind"><div class="meta">
-      <div class="iname"><a class="iname-link" href="${i.src}" target="_blank" rel="noopener" title="${i.src} 새 탭에서 열기">${i.name}</a><span class="freq">${i.freq}</span><button class="cal-icon" data-trendtoggle="${i.key}" title="추세·기간 보기">📅</button></div>
+      <div class="iname"><a class="iname-link" href="${i.src}" target="_blank" rel="noopener" title="${i.src} 새 탭에서 열기">${i.name}</a><span class="freq">${i.freq}</span><button class="cal-icon" data-trendtoggle="${i.key}" title="추세·기간 보기">📅</button><button class="cal-icon${S.notes[i.key]?' has-note':''}" data-notetoggle="${i.key}" title="한줄 메모">📝</button></div>
       <div class="idesc">${i.desc} · <a href="${i.src}" target="_blank" rel="noopener">출처</a></div>
     </div><div class="right"></div></div>`);
   const right = row.querySelector('.right');
+
+  // 한줄 메모 — 📝 아이콘으로 열고 닫으며, 저장하면 이 지표에 계속 표시됩니다
+  {
+    const meta = row.querySelector('.meta');
+    if(S.noteOpen[i.key]){
+      const noteDiv = el(`<div class="note-row">
+        <input type="text" maxlength="80" placeholder="한줄 메모" value="${escHtml(S.notes[i.key]||'')}" data-note="${i.key}">
+        <button class="exsave-btn" data-notesave="${i.key}" title="메모 저장">저장</button></div>`);
+      meta.appendChild(noteDiv);
+    } else if(S.notes[i.key]){
+      meta.appendChild(el(`<div class="note-display">📝 ${escHtml(S.notes[i.key])}</div>`));
+    }
+  }
 
   // expect fields (수기 결/예) — 날짜를 지정하고 "저장"을 누르면 그 날짜로 추세 기록에 누적됩니다
   if(i.expect){
@@ -1091,7 +1160,7 @@ function indRow(i){
   if(S.trendOpen[i.key]){
     const tpanel = el(`<div class="trend-panel"></div>`);
     const range = S.trendRange[i.key]||{};
-    const isFred = FRED_HISTORY_KEYS.has(i.key);
+    const isFred = isFredBacked(i.key);
     const rangeRow = el(`<div class="range-row">
       <span>기간</span>
       <input type="date" data-trendfrom="${i.key}" value="${range.from||''}">
@@ -1305,8 +1374,19 @@ function bind(){
   document.querySelectorAll('[data-trendtoggle]').forEach(b=> b.onclick=()=>{
     const k=b.dataset.trendtoggle; const opening=!S.trendOpen[k];
     S.trendOpen[k]=opening; save(); render();
-    if(opening && FRED_HISTORY_KEYS.has(k) && !FRED_HIST_CACHE[k]) queryTrend(k);
+    if(opening && isFredBacked(k) && !FRED_HIST_CACHE[k]) queryTrend(k);
   });
+  document.querySelectorAll('[data-notetoggle]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.notetoggle; S.noteOpen[k]=!S.noteOpen[k]; save(); render();
+  });
+  document.querySelectorAll('[data-notesave]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.notesave;
+    const inp=document.querySelector(`[data-note="${k}"]`);
+    S.notes[k]=inp?inp.value.trim():'';
+    S.noteOpen[k]=false; save(); render();
+    toast('✓ 메모 저장 완료');
+  });
+  document.querySelectorAll('[data-note]').forEach(inp=> inp.addEventListener('keydown',e=>{if(e.key==='Enter')e.target.blur();}));
   document.querySelectorAll('[data-trendfrom]').forEach(inp=> inp.addEventListener('change',e=>{
     const k=e.target.dataset.trendfrom; if(!S.trendRange[k])S.trendRange[k]={};
     S.trendRange[k].from = e.target.value||undefined; save(); render();
@@ -1317,12 +1397,12 @@ function bind(){
   }));
   document.querySelectorAll('[data-trendreset]').forEach(b=> b.onclick=()=>{
     const k=b.dataset.trendreset; delete S.trendRange[k]; save(); render();
-    if(FRED_HISTORY_KEYS.has(k)) queryTrend(k);
+    if(isFredBacked(k)) queryTrend(k);
   });
   document.querySelectorAll('[data-trendquery]').forEach(b=> b.onclick=()=> queryTrend(b.dataset.trendquery));
   document.querySelectorAll('[data-trendfreq]').forEach(b=> b.onclick=()=>{
     const k=b.dataset.trendfreq; S.trendFreq[k]=b.dataset.freqval; save();
-    if(FRED_HISTORY_KEYS.has(k)) queryTrend(k); else render();
+    if(isFredBacked(k)) queryTrend(k); else render();
   });
 
   // manual override (수동 재정의)
@@ -1387,7 +1467,8 @@ function toast(msg){ const t=el(`<div class="toast">${msg}</div>`); document.bod
 // FRED 키 -> 대시보드 키 매핑 (base_rate만 S.baseRate로, 나머지는 S.vals/S.chgs로)
 const FRED_KEY_MAP = {
   base_rate:'baseRate', dgs2:'dgs2', dgs10:'dgs10', dgs30:'dgs30', t10y2y:'t10y2y',
-  wti:'wti', brent:'brent', hyspread:'hyspread', m2:'m2', walcl:'walcl', tga:'tga', rrp:'rrp'
+  wti:'wti', brent:'brent', hyspread:'hyspread', m2:'m2', walcl:'walcl', tga:'tga', rrp:'rrp',
+  dgs10base:'dgs10base'
 };
 
 async function aiUpdate(){

@@ -37,6 +37,7 @@ const SERIES = {
   walcl:     'WALCL',        // 연준 대차대조표 총자산 (주간)
   tga:       'WTREGEN',      // 재무부 일반계정(TGA) 잔고
   rrp:       'RRPONTSYD',    // 익일 역레포(ON RRP)
+  dgs10base: 'T10YFF',       // 10년물 - 연방기금금리 스프레드 (FRED 공식 시리즈)
 };
 
 // 시리즈별 단위 보정 — WALCL·WTREGEN(TGA)은 FRED가 "백만 달러" 단위라서
