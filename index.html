@@ -857,6 +857,7 @@ function rateHtml(i){
 function buildTrendChart(i){
   if(isFredBacked(i.key)){
     // 사용자가 직접 조회한 커스텀 기간/주기가 있으면 그걸 표시에 우선 사용하고, 없으면 기본 24개월 캐시를 그대로 보여줍니다.
+    if(!FRED_HIST_CACHE[i.key]) queryBaseHistory(i.key); // 새로고침 등으로 패널이 이미 열린 채였다면 클릭 없이도 여기서 자동으로 요청을 시작함
     const cache = FRED_QUERY_CACHE[i.key] || FRED_HIST_CACHE[i.key];
     if(!cache) return `<div class="trend-empty"><span class="spin"></span> FRED 과거 데이터 조회 중…</div>`;
     if(cache.loading) return `<div class="trend-empty"><span class="spin"></span> FRED 과거 데이터 조회 중…</div>`;
