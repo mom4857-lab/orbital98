@@ -584,8 +584,14 @@ function fmt(v,unit){ if(v==null||isNaN(v)) return '—'; let n = Math.abs(v)>=1
 
 // FRED 공식 API로 실제 과거 데이터를 조회할 수 있는 지표 키 (worker.js의 SERIES와 동일 — base_rate 제외)
 const FRED_HISTORY_KEYS = new Set(['t10y2y','dgs10','dgs2','dgs30','wti','brent','hyspread','m2','walcl','tga','rrp','dgs10base']);
-// FRED 과거 데이터 조회 결과 캐시 (저장하지 않음 — 새로고침 시 다시 조회)
-const FRED_HIST_CACHE = {}; // key -> {points:[{t,v}], freq, loading, error}
+
+// FRED_HIST_CACHE: 패널을 열 때 자동으로 한 번만 가져오는 "기본 24개월" 데이터.
+//   - 사용자가 별도 기간을 지정하지 않았을 때의 기본 차트 표시
+//   - 전월비/전년비 계산 (표시 기간을 나중에 좁혀도 이 데이터는 그대로 유지되어 항상 정확)
+// FRED_QUERY_CACHE: "조회"/"전체 기간"/주기 변경처럼 사용자가 직접 요청했을 때만 채워지는 캐시.
+//   있으면 화면 표시에는 이 데이터가 우선 사용되지만, 전월비/전년비는 계속 FRED_HIST_CACHE 기준입니다.
+const FRED_HIST_CACHE = {};   // key -> {points, loading, error}
+const FRED_QUERY_CACHE = {};  // key -> {points, freq, loading, error}
 
 // historySource가 설정된 파생 지표(예: 2년물−기준금리)는 실제 FRED 조회 시
 // 그 원본 지표(예: dgs2)의 시리즈를 대신 요청합니다 — 캐시는 파생 키 자체에 별도 보관.
@@ -599,49 +605,53 @@ function isFredBacked(key){
   return !!(ind && ind.historySource);
 }
 
-// 전월비/전년비 계산 전용 캐시 — 사용자가 차트 표시 기간을 좁게 잡아도(예: 26.1~26.7)
-// 항상 최근 ~14개월치를 별도로 가져와서 정확히 계산할 수 있도록 표시 범위와 분리해서 관리합니다.
-const RATE_CACHE = {}; // key -> {points, loading, error}
-async function queryRateData(key){
+async function fetchFredPoints(fetchKey, {from, to, freq}={}){
+  const params = new URLSearchParams({key:fetchKey, freq: freq||'d'});
+  if(from) params.set('from', from);
+  if(to) params.set('to', to);
+  const resp = await fetch(`/api/fred-history?${params.toString()}`);
+  if(!resp.ok){
+    const errPayload = await resp.json().catch(()=>({}));
+    const msg = (errPayload.error || ('http-'+resp.status)) + (errPayload.detail ? ' — '+errPayload.detail : '');
+    throw new Error(msg);
+  }
+  const payload = await resp.json();
+  return payload.points||[];
+}
+
+// 패널을 처음 열 때 딱 한 번, 최근 24개월치만 가져옵니다 (대부분 2년 이내 데이터만 보시니 충분하고,
+// 예전처럼 시리즈 시작일부터 전체를 매번 새로 받아오지 않아 훨씬 빠릅니다).
+async function queryBaseHistory(key){
   const fetchKey = historyFetchKey(key);
   if(!FRED_HISTORY_KEYS.has(fetchKey)) return;
-  if(RATE_CACHE[key] && (RATE_CACHE[key].loading || RATE_CACHE[key].points)) return; // 이미 로딩중이거나 가져온 적 있으면 재요청 안함
-  RATE_CACHE[key] = {loading:true, error:null, points:null};
+  if(FRED_HIST_CACHE[key] && (FRED_HIST_CACHE[key].loading || FRED_HIST_CACHE[key].points)) return;
+  FRED_HIST_CACHE[key] = {loading:true, error:null, points:null};
+  render();
   try{
-    const d = new Date(); d.setDate(d.getDate()-425);
+    const d = new Date(); d.setDate(d.getDate()-730); // 24개월
     const fromStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    const params = new URLSearchParams({key:fetchKey, freq:'d', from:fromStr});
-    const resp = await fetch(`/api/fred-history?${params.toString()}`);
-    if(!resp.ok) throw new Error('http-'+resp.status);
-    const payload = await resp.json();
-    RATE_CACHE[key] = {points: payload.points||[], loading:false, error:null};
+    const points = await fetchFredPoints(fetchKey, {from: fromStr, freq:'d'});
+    FRED_HIST_CACHE[key] = {points, loading:false, error:null};
   }catch(e){
-    RATE_CACHE[key] = {points:null, loading:false, error:String(e.message||e)};
+    FRED_HIST_CACHE[key] = {points:null, loading:false, error:String(e.message||e)};
   }
   render();
 }
 
+// 사용자가 기간/주기를 직접 조회(조회 버튼·전체 기간·주기 변경)했을 때만 호출됩니다 — 표시 전용 캐시라서
+// 기본 24개월 캐시(FRED_HIST_CACHE)는 그대로 남아있고, 전월비/전년비 계산에는 영향이 없습니다.
 async function queryTrend(key){
   const fetchKey = historyFetchKey(key);
   if(!FRED_HISTORY_KEYS.has(fetchKey)){ render(); return; } // 수기입력 지표는 로컬 기록이라 즉시 재렌더만 하면 됨
   const range = S.trendRange[key]||{};
   const freq = S.trendFreq[key]||'d';
-  FRED_HIST_CACHE[key] = {...(FRED_HIST_CACHE[key]||{}), loading:true, error:null};
+  FRED_QUERY_CACHE[key] = {...(FRED_QUERY_CACHE[key]||{}), loading:true, error:null};
   render();
   try{
-    const params = new URLSearchParams({key:fetchKey, freq});
-    if(range.from) params.set('from', range.from);
-    if(range.to) params.set('to', range.to);
-    const resp = await fetch(`/api/fred-history?${params.toString()}`);
-    if(!resp.ok){
-      const errPayload = await resp.json().catch(()=>({}));
-      const msg = (errPayload.error || ('http-'+resp.status)) + (errPayload.detail ? ' — '+errPayload.detail : '');
-      throw new Error(msg);
-    }
-    const payload = await resp.json();
-    FRED_HIST_CACHE[key] = {points: payload.points||[], freq, loading:false, error:null};
+    const points = await fetchFredPoints(fetchKey, {from:range.from, to:range.to, freq});
+    FRED_QUERY_CACHE[key] = {points, freq, loading:false, error:null};
   }catch(e){
-    FRED_HIST_CACHE[key] = {points: (FRED_HIST_CACHE[key]&&FRED_HIST_CACHE[key].points)||[], freq, loading:false, error:String(e.message||e)};
+    FRED_QUERY_CACHE[key] = {points: (FRED_QUERY_CACHE[key]&&FRED_QUERY_CACHE[key].points)||[], freq, loading:false, error:String(e.message||e)};
   }
   render();
 }
@@ -770,11 +780,11 @@ function calcYoyMom(pts){
   return {mom, yoy, latestDate: latest.t};
 }
 // 전월비/전년비는 항상 "화면에 표시 중인 기간"과 무관하게 계산됩니다 —
-// FRED 자동지표는 RATE_CACHE(항상 최근 14개월 별도 조회)를, 수기입력(MMF 등)은 저장된 전체 기록을 사용합니다.
+// FRED 자동지표는 기본 24개월 캐시(FRED_HIST_CACHE)를, 수기입력(MMF 등)은 저장된 전체 기록을 사용합니다.
 function getRateInfo(i){
   if(!i.rateDisplay) return null;
   if(isFredBacked(i.key)){
-    const cache = RATE_CACHE[i.key];
+    const cache = FRED_HIST_CACHE[i.key];
     if(!cache || cache.loading || cache.error || !cache.points) return null;
     let pts = cache.points.filter(p=>p.v!=null && !isNaN(p.v));
     if(i.historySource) pts = pts.map(p=>({t:p.t, v: round(p.v - S.baseRate, 2)}));
@@ -786,7 +796,7 @@ function getRateInfo(i){
 function rateHtml(i){
   if(!i.rateDisplay) return '';
   if(isFredBacked(i.key)){
-    const cache = RATE_CACHE[i.key];
+    const cache = FRED_HIST_CACHE[i.key];
     if(!cache || cache.loading) return `<div class="rate-badges"><span class="rate-badge">전월비·전년비 계산 중…</span></div>`;
   }
   const r = getRateInfo(i);
@@ -800,8 +810,9 @@ function rateHtml(i){
 }
 function buildTrendChart(i){
   if(isFredBacked(i.key)){
-    const cache = FRED_HIST_CACHE[i.key];
-    if(!cache) return `<div class="trend-empty">"조회" 버튼을 누르면 FRED 공식 과거 데이터를 직접 가져옵니다.</div>`;
+    // 사용자가 직접 조회한 커스텀 기간/주기가 있으면 그걸 표시에 우선 사용하고, 없으면 기본 24개월 캐시를 그대로 보여줍니다.
+    const cache = FRED_QUERY_CACHE[i.key] || FRED_HIST_CACHE[i.key];
+    if(!cache) return `<div class="trend-empty"><span class="spin"></span> FRED 과거 데이터 조회 중…</div>`;
     if(cache.loading) return `<div class="trend-empty"><span class="spin"></span> FRED 과거 데이터 조회 중…</div>`;
     if(cache.error) return `<div class="trend-empty">조회 실패: ${cache.error} — 잠시 후 다시 시도해주세요.</div>`;
     let pts = (cache.points||[]).filter(p=>p.v!=null && !isNaN(p.v));
@@ -1455,8 +1466,11 @@ function bind(){
   document.querySelectorAll('[data-trendtoggle]').forEach(b=> b.onclick=()=>{
     const k=b.dataset.trendtoggle; const opening=!S.trendOpen[k];
     S.trendOpen[k]=opening; save(); render();
-    if(opening && isFredBacked(k) && !FRED_HIST_CACHE[k]) queryTrend(k);
-    if(opening){ const ind=INDICATORS.find(x=>x.key===k); if(ind && ind.rateDisplay) queryRateData(k); }
+    if(opening && isFredBacked(k)){
+      if(!FRED_HIST_CACHE[k]) queryBaseHistory(k); // 기본 24개월 — 표시 기본값 + 전월비/전년비 계산용, 한 번만
+      const range = S.trendRange[k];
+      if((range && (range.from || range.to)) && !FRED_QUERY_CACHE[k]) queryTrend(k); // 이전에 커스텀 기간을 지정해뒀다면 그것도 반영
+    }
   });
   document.querySelectorAll('[data-notetoggle]').forEach(b=> b.onclick=()=>{
     const k=b.dataset.notetoggle; S.noteOpen[k]=!S.noteOpen[k]; save(); render();
