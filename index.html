@@ -39,6 +39,38 @@
 .banner img{width:100%;height:220px;object-fit:cover;object-position:center;display:block;transform:scale(1.04)}
 @media(max-width:640px){.banner img{height:140px}}
 .top-actions{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.tab-nav{display:flex;gap:8px;margin:18px 0 6px;border-bottom:1px solid var(--border);padding-bottom:0}
+.tab-btn{background:none;border:none;color:var(--muted);font-size:14px;font-weight:700;padding:10px 4px;
+  cursor:pointer;border-bottom:2px solid transparent;margin-right:14px}
+.tab-btn:hover{color:var(--ink)}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.analysis-tab{padding:18px 0}
+.analysis-upload{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.upload-label{cursor:pointer}
+.upload-hint{font-size:12px;color:var(--muted)}
+.report-list{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+.report-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:9px;border:1px solid var(--border);
+  background:var(--panel-2);cursor:pointer}
+.report-item.active{border-color:var(--accent);background:var(--accent-bg)}
+.report-title{font-weight:700;flex:1}
+.report-meta{font-size:11px;color:var(--muted)}
+.report-del{background:none;border:none;color:var(--faint);cursor:pointer;font-size:14px;padding:2px 6px}
+.report-del:hover{color:var(--sell)}
+.md-viewer{padding:22px 26px;border:1px solid var(--border);border-radius:10px;background:var(--panel);
+  line-height:1.7;font-size:14px;color:var(--ink);max-width:900px}
+.md-viewer h1{font-size:22px;margin:0 0 12px;color:var(--ink)}
+.md-viewer h2{font-size:18px;margin:26px 0 10px;padding-top:14px;border-top:1px solid var(--border);color:var(--ink)}
+.md-viewer h3{font-size:15px;margin:20px 0 8px;color:var(--accent)}
+.md-viewer h4{font-size:13px;margin:14px 0 6px;color:var(--muted)}
+.md-viewer p{margin:8px 0;color:var(--ink)}
+.md-viewer hr{border:none;border-top:1px solid var(--border);margin:20px 0}
+.md-viewer blockquote{margin:10px 0;padding:10px 14px;border-left:3px solid var(--accent);
+  background:var(--accent-bg);border-radius:0 8px 8px 0;color:var(--muted);font-size:13px}
+.md-viewer code{background:var(--panel-2);padding:1px 5px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:12.5px}
+.md-viewer table.md-table{width:100%;border-collapse:collapse;margin:12px 0;font-size:12.5px}
+.md-viewer table.md-table th,.md-viewer table.md-table td{border:1px solid var(--border);padding:7px 9px;text-align:left}
+.md-viewer table.md-table th{background:var(--panel-2);font-weight:700}
+.md-viewer table.md-table tr:nth-child(even) td{background:rgba(255,255,255,.02)}
 .btn{cursor:pointer;border:1px solid var(--border);background:var(--panel);color:var(--ink);
   font-family:inherit;font-size:13px;font-weight:600;padding:10px 16px;border-radius:10px;
   display:inline-flex;align-items:center;gap:8px;transition:.15s}
@@ -488,6 +520,9 @@ const DEFAULT = () => ({
   customBands: {}, bandOpen: {},
   history: {}, trendOpen: {}, trendRange: {}, trendFreq: {},
   manualOverride: {},
+  activeTab: 'live', // 'live' | 'analysis'
+  analysisReports: [], // {id, title, uploadedAt, content, sizeKB} — 마크다운(.md) 분석 리포트 보관용
+  activeReportId: null,
   manDate: {},
   notes: {}, noteOpen: {},
   memo: {}, // 지표별 여러 줄 메모(현재 상황 기록용) — 한줄 메모(notes)와는 별개
@@ -509,6 +544,9 @@ async function load(){
       history:{...(saved.history||{})}, trendOpen:{...(saved.trendOpen||{})}, trendRange:{...(saved.trendRange||{})},
       trendFreq:{...(saved.trendFreq||{})},
       manualOverride:{...(saved.manualOverride||{})},
+      activeTab: saved.activeTab==='analysis' ? 'analysis' : 'live',
+      analysisReports: Array.isArray(saved.analysisReports) ? saved.analysisReports : [],
+      activeReportId: saved.activeReportId || null,
       manDate:{...(saved.manDate||{})},
       notes:{...(saved.notes||{})}, noteOpen:{...(saved.noteOpen||{})},
       memo:{...(saved.memo||{})},
@@ -1019,6 +1057,80 @@ function buildPolicyPathSVG(){
   return `<svg viewBox="0 0 ${W} ${H}" class="path-svg" preserveAspectRatio="xMidYMid meet">${svg}</svg>`;
 }
 
+// PDF 분석 리포트 탭 — 업로드한 PDF를 목록으로 보여주고, 선택한 걸 그대로 화면에 표시합니다.
+function renderAnalysisTab(){
+  const box = el(`<div class="analysis-tab"></div>`);
+  box.appendChild(el(`<div class="analysis-upload">
+    <label class="btn primary upload-label">📤 마크다운(.md) 업로드
+      <input type="file" accept=".md,text/markdown,text/plain" id="md-upload-input" style="display:none">
+    </label>
+    <span class="upload-hint">Claude와 대화해서 만든 경제지표 분석 리포트(.md 텍스트)를 업로드해두면 계속 저장되어 언제든 다시 볼 수 있어요.</span>
+  </div>`));
+
+  const reports = (S.analysisReports||[]).slice().sort((a,b)=> b.uploadedAt.localeCompare(a.uploadedAt) || b.id.localeCompare(a.id));
+  if(!reports.length){
+    box.appendChild(el(`<div class="trend-empty" style="margin-top:16px">아직 업로드된 분석 리포트가 없습니다. 위 버튼으로 .md 파일을 업로드해주세요.</div>`));
+    return box;
+  }
+
+  const listWrap = el(`<div class="report-list"></div>`);
+  reports.forEach(r=>{
+    listWrap.appendChild(el(`<div class="report-item ${S.activeReportId===r.id?'active':''}" data-report="${r.id}">
+      <span class="report-title">📝 ${escHtml(r.title)}</span>
+      <span class="report-meta">${r.uploadedAt} · ${r.sizeKB}KB</span>
+      <button class="report-del" data-report-del="${r.id}" title="삭제">✕</button>
+    </div>`));
+  });
+  box.appendChild(listWrap);
+
+  const activeReport = reports.find(r=>r.id===S.activeReportId) || reports[0];
+  if(activeReport){
+    const viewer = el(`<div class="report-viewer md-viewer"></div>`);
+    viewer.innerHTML = renderMarkdown(activeReport.content||'');
+    box.appendChild(viewer);
+  }
+  return box;
+}
+
+// 아주 가벼운 자체 마크다운 → HTML 변환기 (외부 라이브러리 없이 표/제목/굵게/인용/구분선 정도만 지원 — 이 리포트 형식에 맞춤)
+function renderMarkdown(md){
+  const lines = String(md||'').replace(/\r\n/g,'\n').split('\n');
+  const inlineFmt = s => escHtml(s)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '<i>$1</i>')
+    .replace(/`([^`]+?)`/g, '<code>$1</code>');
+  let html = '', i = 0, tableHeader = null, tableRows = [], inTable = false;
+  const flushTable = ()=>{
+    if(tableHeader){
+      html += '<table class="md-table"><thead><tr>' + tableHeader.map(h=>`<th>${inlineFmt(h)}</th>`).join('') + '</tr></thead><tbody>';
+      tableRows.forEach(r=> html += '<tr>' + r.map(c=>`<td>${inlineFmt(c)}</td>`).join('') + '</tr>');
+      html += '</tbody></table>';
+    }
+    tableHeader = null; tableRows = []; inTable = false;
+  };
+  while(i<lines.length){
+    const raw = lines[i];
+    const t = raw.trim();
+    if(t.startsWith('|') && t.endsWith('|')){
+      const cells = t.slice(1,-1).split('|').map(c=>c.trim());
+      if(cells.every(c=>/^:?-{2,}:?$/.test(c))){ i++; continue; } // 헤더 구분선(|---|---|) 건너뜀
+      if(!inTable){ tableHeader = cells; inTable = true; } else tableRows.push(cells);
+      i++; continue;
+    } else if(inTable){ flushTable(); }
+    if(t==='---' || t==='***'){ html += '<hr>'; i++; continue; }
+    if(t.startsWith('#### ')){ html += `<h4>${inlineFmt(t.slice(5))}</h4>`; i++; continue; }
+    if(t.startsWith('### ')){ html += `<h3>${inlineFmt(t.slice(4))}</h3>`; i++; continue; }
+    if(t.startsWith('## ')){ html += `<h2>${inlineFmt(t.slice(3))}</h2>`; i++; continue; }
+    if(t.startsWith('# ')){ html += `<h1>${inlineFmt(t.slice(2))}</h1>`; i++; continue; }
+    if(t.startsWith('> ')){ html += `<blockquote>${inlineFmt(t.slice(2))}</blockquote>`; i++; continue; }
+    if(t===''){ i++; continue; }
+    html += `<p>${inlineFmt(t)}</p>`;
+    i++;
+  }
+  flushTable();
+  return html;
+}
+
 function renderFomc(){
   const meetingKeys = Object.keys(S.fomcMeetings).sort((a,b)=>{
     const ma=S.fomcMeetings[a], mb=S.fomcMeetings[b];
@@ -1181,6 +1293,19 @@ function render(){
         <div class="status" id="status"></div>
       </div>
     </div>`));
+
+  // ---- tab nav ----
+  wrap.appendChild(el(`<div class="tab-nav">
+    <button class="tab-btn ${S.activeTab==='live'?'active':''}" data-tab="live">📊 실시간 경제지표</button>
+    <button class="tab-btn ${S.activeTab==='analysis'?'active':''}" data-tab="analysis">📄 경제지표 분석</button>
+  </div>`));
+
+  if(S.activeTab==='analysis'){
+    wrap.appendChild(renderAnalysisTab());
+    root.appendChild(wrap);
+    bind();
+    return;
+  }
 
   // ---- hero ----
   const hero = el('<div class="hero"></div>');
@@ -1577,6 +1702,57 @@ function bind(){
     toast(`✓ ${d} 기록 삭제 완료`);
   });
   document.getElementById('ai-btn').onclick = aiUpdate;
+
+  // ---- 탭 전환 ----
+  document.querySelectorAll('[data-tab]').forEach(b=> b.onclick=()=>{
+    S.activeTab = b.dataset.tab; save(); render();
+  });
+
+  // ---- PDF 분석 리포트 업로드/선택/삭제 ----
+  const mdInput = document.getElementById('md-upload-input');
+  if(mdInput) mdInput.addEventListener('change', e=>{
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    if(!/\.md$/i.test(file.name) && file.type!=='text/markdown' && file.type!=='text/plain'){
+      toast('마크다운(.md) 파일만 업로드할 수 있습니다'); e.target.value=''; return;
+    }
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const content = reader.result;
+      const sizeKB = Math.round(file.size/1024) || 1;
+      const now = new Date();
+      const uploadedAt = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      const newReport = {id:'r'+Date.now(), title:file.name.replace(/\.md$/i,''), uploadedAt, content, sizeKB};
+      const prevReports = S.analysisReports, prevActive = S.activeReportId;
+      S.analysisReports = [...S.analysisReports, newReport];
+      S.activeReportId = newReport.id;
+      try{
+        localStorage.setItem(KEY, JSON.stringify(S));
+        render();
+        toast('✓ 리포트 저장 완료');
+      }catch(err){
+        S.analysisReports = prevReports; S.activeReportId = prevActive; // 저장 실패 시 되돌림
+        render();
+        toast('저장 실패 — 저장 공간이 가득 찼습니다. 오래된 리포트를 삭제 후 다시 시도해주세요.');
+      }
+    };
+    reader.onerror = ()=> toast('파일을 읽는 데 실패했습니다');
+    reader.readAsText(file, 'utf-8');
+    e.target.value = '';
+  });
+  document.querySelectorAll('[data-report]').forEach(item=> item.addEventListener('click', e=>{
+    if(e.target.closest('[data-report-del]')) return;
+    S.activeReportId = item.dataset.report; save(); render();
+  }));
+  document.querySelectorAll('[data-report-del]').forEach(b=> b.addEventListener('click', e=>{
+    e.stopPropagation();
+    const id = b.dataset.reportDel;
+    if(!confirm('이 분석 리포트를 삭제할까요? 되돌릴 수 없습니다.')) return;
+    S.analysisReports = S.analysisReports.filter(r=>r.id!==id);
+    if(S.activeReportId===id) S.activeReportId = null;
+    save(); render();
+    toast('✓ 삭제 완료');
+  }));
   document.getElementById('export-btn').onclick = async ()=>{
     const text = buildExportText();
     const stamp = `${S.asOf||'snapshot'}`.replace(/[^0-9a-zA-Z가-힣-]/g,'');
