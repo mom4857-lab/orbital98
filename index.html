@@ -1097,7 +1097,7 @@ function renderMarkdown(md){
   const lines = String(md||'').replace(/\r\n/g,'\n').split('\n');
   const inlineFmt = s => escHtml(s)
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-    .replace(/(?<!\*)\*([^*]+?)\*(?!\*)/g, '<i>$1</i>')
+    .replace(/\*([^*]+?)\*/g, '<i>$1</i>')
     .replace(/`([^`]+?)`/g, '<code>$1</code>');
   let html = '', i = 0, tableHeader = null, tableRows = [], inTable = false;
   const flushTable = ()=>{
