@@ -66,9 +66,9 @@
 .fmt-colors{display:flex;gap:6px;padding:0 4px;border-left:1px solid var(--border);margin-left:2px}
 .color-dot{width:18px;height:18px;border-radius:50%;border:1px solid var(--border);cursor:pointer;padding:0}
 .color-dot:hover{border-color:var(--ink);transform:scale(1.12)}
-.report-edit-area{width:100%;min-height:60vh;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.6;
-  padding:16px;border-radius:10px;border:1px solid var(--border);background:var(--panel-2);color:var(--ink);
-  resize:vertical;box-sizing:border-box}
+.edit-hint{font-size:11px;color:var(--muted);white-space:nowrap}
+.report-edit-area{min-height:60vh;outline:none;border:1px solid var(--accent);cursor:text}
+.report-edit-area:focus{box-shadow:0 0 0 2px var(--accent-bg)}
 .md-viewer{padding:22px 26px;border:1px solid var(--border);border-radius:10px;background:var(--panel);
   line-height:1.7;font-size:14px;color:var(--ink)}
 .md-viewer h1{font-size:22px;margin:0 0 12px;color:var(--ink)}
@@ -1115,17 +1115,20 @@ function renderAnalysisTab(){
           <button type="button" class="color-dot" data-fmt-color="#4C8DFF" style="background:#4C8DFF" title="파랑 강조"></button>
         </span>
         <span style="flex:1"></span>
+        <span class="edit-hint">클릭해서 바로 타이핑 · 드래그 선택 후 서식 버튼</span>
         <button type="button" class="btn ghost" data-report-cancel>취소</button>
         <button type="button" class="btn primary" data-report-save>저장</button>
       </div>`));
-      editWrap.appendChild(el(`<textarea class="report-edit-area" id="report-edit-textarea">${escHtml(activeReport.content||'')}</textarea>`));
+      const editArea = el(`<div class="report-edit-area md-viewer" id="report-edit-area" contenteditable="true"></div>`);
+      editArea.innerHTML = toDisplayHtml(activeReport.content);
+      editWrap.appendChild(editArea);
       box.appendChild(editWrap);
     } else {
       box.appendChild(el(`<div class="report-view-toolbar">
         <button type="button" class="btn ghost" data-report-edit>✏️ 편집</button>
       </div>`));
       const viewer = el(`<div class="report-viewer md-viewer"></div>`);
-      viewer.innerHTML = renderMarkdown(activeReport.content||'');
+      viewer.innerHTML = toDisplayHtml(activeReport.content);
       box.appendChild(viewer);
     }
   }
@@ -1171,6 +1174,11 @@ function renderMarkdown(md){
   }
   flushTable();
   return html;
+}
+// content가 이미 HTML(직접 편집 후 저장된 것)이면 그대로, 아니면(업로드 직후 등) 마크다운으로 보고 변환합니다.
+function toDisplayHtml(content){
+  const c = String(content||'');
+  return c.trim().startsWith('<') ? c : renderMarkdown(c);
 }
 
 function renderFomc(){
@@ -1683,13 +1691,13 @@ function bindTopAndAnalysis(){
     save(); render();
     toast('✓ 삭제 완료');
   }));
-  // ---- 리포트 편집 모드 ----
+  // ---- 리포트 편집 모드 (대시보드에 보이는 그대로 직접 편집 — 마크다운 문법 신경 안 써도 됨) ----
   document.querySelectorAll('[data-report-edit]').forEach(b=> b.onclick=()=>{ S.reportEditMode = true; render(); });
   document.querySelectorAll('[data-report-cancel]').forEach(b=> b.onclick=()=>{ S.reportEditMode = false; render(); });
   document.querySelectorAll('[data-report-save]').forEach(b=> b.onclick=()=>{
-    const ta = document.getElementById('report-edit-textarea');
-    if(!ta) return;
-    const newContent = ta.value;
+    const area = document.getElementById('report-edit-area');
+    if(!area) return;
+    const newContent = area.innerHTML;
     const idx = S.analysisReports.findIndex(r=>r.id===S.activeReportId);
     if(idx<0) return;
     const sizeKB = Math.max(1, Math.round(new Blob([newContent]).size/1024));
@@ -1705,26 +1713,14 @@ function bindTopAndAnalysis(){
       toast('저장 실패 — 저장 공간이 가득 찼습니다.');
     }
   });
-  // 굵게(**)/밑줄(__)/색상({{c:색상|텍스트}}) — 선택한 부분을 감싸는 방식 (엑셀의 서식 버튼과 비슷한 느낌)
-  function wrapSelection(open, close){
-    const ta = document.getElementById('report-edit-textarea');
-    if(!ta) return;
-    const start = ta.selectionStart, end = ta.selectionEnd;
-    const before = ta.value.slice(0,start), sel = ta.value.slice(start,end), after = ta.value.slice(end);
-    ta.value = before + open + sel + close + after;
-    ta.focus();
-    ta.setSelectionRange(start+open.length, start+open.length+sel.length);
-  }
+  // 굵게/밑줄/색상 — 화면에서 드래그로 선택한 부분에 바로 적용 (엑셀 서식 버튼과 같은 방식)
   document.querySelectorAll('[data-fmt]').forEach(b=>{
-    b.addEventListener('mousedown', e=> e.preventDefault()); // 버튼 클릭해도 textarea 포커스/선택영역이 풀리지 않도록
-    b.addEventListener('click', ()=>{
-      if(b.dataset.fmt==='bold') wrapSelection('**','**');
-      else if(b.dataset.fmt==='underline') wrapSelection('__','__');
-    });
+    b.addEventListener('mousedown', e=> e.preventDefault()); // 버튼 클릭 시 편집 영역의 선택(드래그)이 풀리지 않도록
+    b.addEventListener('click', ()=> document.execCommand(b.dataset.fmt==='bold'?'bold':'underline', false, null));
   });
   document.querySelectorAll('[data-fmt-color]').forEach(b=>{
     b.addEventListener('mousedown', e=> e.preventDefault());
-    b.addEventListener('click', ()=> wrapSelection(`{{c:${b.dataset.fmtColor}|`, '}}'));
+    b.addEventListener('click', ()=> document.execCommand('foreColor', false, b.dataset.fmtColor));
   });
   const exportBtn = document.getElementById('export-btn');
   if(exportBtn) exportBtn.onclick = async ()=>{
