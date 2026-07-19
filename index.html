@@ -56,6 +56,19 @@
 .report-meta{font-size:11px;color:var(--muted)}
 .report-del{background:none;border:none;color:var(--faint);cursor:pointer;font-size:14px;padding:2px 6px}
 .report-del:hover{color:var(--sell)}
+.report-chevron{color:var(--muted);font-size:11px;width:12px;text-align:center}
+.report-view-toolbar{display:flex;justify-content:flex-end;margin-bottom:8px}
+.report-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 10px;
+  border:1px solid var(--border);border-radius:9px;background:var(--panel-2)}
+.fmt-btn{background:var(--panel);border:1px solid var(--border);border-radius:6px;cursor:pointer;
+  font-size:13px;width:28px;height:28px;color:var(--ink)}
+.fmt-btn:hover{border-color:var(--accent)}
+.fmt-colors{display:flex;gap:6px;padding:0 4px;border-left:1px solid var(--border);margin-left:2px}
+.color-dot{width:18px;height:18px;border-radius:50%;border:1px solid var(--border);cursor:pointer;padding:0}
+.color-dot:hover{border-color:var(--ink);transform:scale(1.12)}
+.report-edit-area{width:100%;min-height:60vh;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.6;
+  padding:16px;border-radius:10px;border:1px solid var(--border);background:var(--panel-2);color:var(--ink);
+  resize:vertical;box-sizing:border-box}
 .md-viewer{padding:22px 26px;border:1px solid var(--border);border-radius:10px;background:var(--panel);
   line-height:1.7;font-size:14px;color:var(--ink)}
 .md-viewer h1{font-size:22px;margin:0 0 12px;color:var(--ink)}
@@ -523,6 +536,8 @@ const DEFAULT = () => ({
   activeTab: 'live', // 'live' | 'analysis'
   analysisReports: [], // {id, title, uploadedAt, content, sizeKB} — 마크다운(.md) 분석 리포트 보관용
   activeReportId: null,
+  reportViewerOpen: true, // 세부 내용 접기/펼치기
+  reportEditMode: false, // 편집 모드 여부
   manDate: {},
   notes: {}, noteOpen: {},
   memo: {}, // 지표별 여러 줄 메모(현재 상황 기록용) — 한줄 메모(notes)와는 별개
@@ -1075,7 +1090,10 @@ function renderAnalysisTab(){
 
   const listWrap = el(`<div class="report-list"></div>`);
   reports.forEach(r=>{
-    listWrap.appendChild(el(`<div class="report-item ${S.activeReportId===r.id?'active':''}" data-report="${r.id}">
+    const isActive = S.activeReportId===r.id;
+    const expanded = isActive && S.reportViewerOpen;
+    listWrap.appendChild(el(`<div class="report-item ${isActive?'active':''}" data-report="${r.id}">
+      <span class="report-chevron">${expanded?'▾':'▸'}</span>
       <span class="report-title">📝 ${escHtml(r.title)}</span>
       <span class="report-meta">${r.uploadedAt} · ${r.sizeKB}KB</span>
       <button class="report-del" data-report-del="${r.id}" title="삭제">✕</button>
@@ -1084,10 +1102,32 @@ function renderAnalysisTab(){
   box.appendChild(listWrap);
 
   const activeReport = reports.find(r=>r.id===S.activeReportId) || reports[0];
-  if(activeReport){
-    const viewer = el(`<div class="report-viewer md-viewer"></div>`);
-    viewer.innerHTML = renderMarkdown(activeReport.content||'');
-    box.appendChild(viewer);
+  if(activeReport && S.reportViewerOpen){
+    if(S.reportEditMode){
+      const editWrap = el(`<div class="report-edit-wrap"></div>`);
+      editWrap.appendChild(el(`<div class="report-toolbar">
+        <button type="button" class="fmt-btn" data-fmt="bold" title="굵게"><b>B</b></button>
+        <button type="button" class="fmt-btn" data-fmt="underline" title="밑줄"><u>U</u></button>
+        <span class="fmt-colors">
+          <button type="button" class="color-dot" data-fmt-color="#E5484D" style="background:#E5484D" title="빨강 강조"></button>
+          <button type="button" class="color-dot" data-fmt-color="#E3A93C" style="background:#E3A93C" title="주황 강조"></button>
+          <button type="button" class="color-dot" data-fmt-color="#34C77B" style="background:#34C77B" title="초록 강조"></button>
+          <button type="button" class="color-dot" data-fmt-color="#4C8DFF" style="background:#4C8DFF" title="파랑 강조"></button>
+        </span>
+        <span style="flex:1"></span>
+        <button type="button" class="btn ghost" data-report-cancel>취소</button>
+        <button type="button" class="btn primary" data-report-save>저장</button>
+      </div>`));
+      editWrap.appendChild(el(`<textarea class="report-edit-area" id="report-edit-textarea">${escHtml(activeReport.content||'')}</textarea>`));
+      box.appendChild(editWrap);
+    } else {
+      box.appendChild(el(`<div class="report-view-toolbar">
+        <button type="button" class="btn ghost" data-report-edit>✏️ 편집</button>
+      </div>`));
+      const viewer = el(`<div class="report-viewer md-viewer"></div>`);
+      viewer.innerHTML = renderMarkdown(activeReport.content||'');
+      box.appendChild(viewer);
+    }
   }
   return box;
 }
@@ -1097,8 +1137,10 @@ function renderMarkdown(md){
   const lines = String(md||'').replace(/\r\n/g,'\n').split('\n');
   const inlineFmt = s => escHtml(s)
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/__(.+?)__/g, '<u>$1</u>')
     .replace(/\*([^*]+?)\*/g, '<i>$1</i>')
-    .replace(/`([^`]+?)`/g, '<code>$1</code>');
+    .replace(/`([^`]+?)`/g, '<code>$1</code>')
+    .replace(/\{\{c:(#?[a-zA-Z0-9]+)\|(.+?)\}\}/g, '<span style="color:$1">$2</span>');
   let html = '', i = 0, tableHeader = null, tableRows = [], inTable = false;
   const flushTable = ()=>{
     if(tableHeader){
@@ -1627,7 +1669,10 @@ function bindTopAndAnalysis(){
   });
   document.querySelectorAll('[data-report]').forEach(item=> item.addEventListener('click', e=>{
     if(e.target.closest('[data-report-del]')) return;
-    S.activeReportId = item.dataset.report; save(); render();
+    const id = item.dataset.report;
+    if(S.activeReportId===id){ S.reportViewerOpen = !S.reportViewerOpen; }
+    else { S.activeReportId = id; S.reportViewerOpen = true; S.reportEditMode = false; }
+    save(); render();
   }));
   document.querySelectorAll('[data-report-del]').forEach(b=> b.addEventListener('click', e=>{
     e.stopPropagation();
@@ -1638,6 +1683,49 @@ function bindTopAndAnalysis(){
     save(); render();
     toast('✓ 삭제 완료');
   }));
+  // ---- 리포트 편집 모드 ----
+  document.querySelectorAll('[data-report-edit]').forEach(b=> b.onclick=()=>{ S.reportEditMode = true; render(); });
+  document.querySelectorAll('[data-report-cancel]').forEach(b=> b.onclick=()=>{ S.reportEditMode = false; render(); });
+  document.querySelectorAll('[data-report-save]').forEach(b=> b.onclick=()=>{
+    const ta = document.getElementById('report-edit-textarea');
+    if(!ta) return;
+    const newContent = ta.value;
+    const idx = S.analysisReports.findIndex(r=>r.id===S.activeReportId);
+    if(idx<0) return;
+    const sizeKB = Math.max(1, Math.round(new Blob([newContent]).size/1024));
+    const prev = S.analysisReports;
+    S.analysisReports = S.analysisReports.map((r,ix)=> ix===idx ? {...r, content:newContent, sizeKB} : r);
+    S.reportEditMode = false;
+    try{
+      localStorage.setItem(KEY, JSON.stringify(S));
+      render();
+      toast('✓ 수정 저장 완료');
+    }catch(err){
+      S.analysisReports = prev; render();
+      toast('저장 실패 — 저장 공간이 가득 찼습니다.');
+    }
+  });
+  // 굵게(**)/밑줄(__)/색상({{c:색상|텍스트}}) — 선택한 부분을 감싸는 방식 (엑셀의 서식 버튼과 비슷한 느낌)
+  function wrapSelection(open, close){
+    const ta = document.getElementById('report-edit-textarea');
+    if(!ta) return;
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const before = ta.value.slice(0,start), sel = ta.value.slice(start,end), after = ta.value.slice(end);
+    ta.value = before + open + sel + close + after;
+    ta.focus();
+    ta.setSelectionRange(start+open.length, start+open.length+sel.length);
+  }
+  document.querySelectorAll('[data-fmt]').forEach(b=>{
+    b.addEventListener('mousedown', e=> e.preventDefault()); // 버튼 클릭해도 textarea 포커스/선택영역이 풀리지 않도록
+    b.addEventListener('click', ()=>{
+      if(b.dataset.fmt==='bold') wrapSelection('**','**');
+      else if(b.dataset.fmt==='underline') wrapSelection('__','__');
+    });
+  });
+  document.querySelectorAll('[data-fmt-color]').forEach(b=>{
+    b.addEventListener('mousedown', e=> e.preventDefault());
+    b.addEventListener('click', ()=> wrapSelection(`{{c:${b.dataset.fmtColor}|`, '}}'));
+  });
   const exportBtn = document.getElementById('export-btn');
   if(exportBtn) exportBtn.onclick = async ()=>{
     const text = buildExportText();
