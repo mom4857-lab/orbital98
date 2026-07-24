@@ -235,6 +235,10 @@ select.sigsel option{background:var(--panel);color:var(--ink)}
 .steepen-note{font-size:12.5px;color:var(--ink);line-height:1.6;padding:10px 12px;border-radius:8px;
   background:var(--panel-2);margin-bottom:8px}
 .steepen-disclaimer{font-size:11px;color:var(--faint);line-height:1.5}
+.steepen-legend{margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:7px}
+.steepen-legend-item{font-size:11.5px;color:var(--muted);line-height:1.5;padding:6px 8px;border-radius:6px}
+.steepen-legend-item b{font-size:11.5px}
+.steepen-legend-item.current{background:var(--accent-bg);color:var(--ink);border:1px solid var(--accent)}
 .freq-row{display:flex;gap:6px;margin-bottom:10px}
 .freq-tab{font-size:11px;font-weight:700;padding:5px 11px;border-radius:8px;border:1px solid var(--border);
   background:var(--panel);color:var(--muted);cursor:pointer;font-family:inherit}
@@ -1057,15 +1061,15 @@ function analyzeSteepening(){
   const spreadChange = round(last.spread-base.spread,3);
   const steepening = spreadChange>0;
   const drivenBy2y = Math.abs(delta2) > Math.abs(delta10);
-  let label, cls;
+  let label, cls, type;
   if(steepening){
-    if(delta2<0 && drivenBy2y){ label='불 스티프닝 (Bull-steepening)'; cls='s-buy'; }
-    else if(delta10>0 && !drivenBy2y){ label='베어 스티프닝 (Bear-steepening)'; cls='s-sell'; }
-    else { label='스티프닝 (혼조)'; cls='s-neu'; }
+    if(delta2<0 && drivenBy2y){ label='불 스티프닝 (Bull-steepening)'; cls='s-buy'; type='bullSteep'; }
+    else if(delta10>0 && !drivenBy2y){ label='베어 스티프닝 (Bear-steepening)'; cls='s-sell'; type='bearSteep'; }
+    else { label='스티프닝 (혼조)'; cls='s-neu'; type='mixed'; }
   } else {
-    if(delta10<0 && !drivenBy2y){ label='불 플래트닝 (Bull-flattening)'; cls='s-buy'; }
-    else if(delta2>0 && drivenBy2y){ label='베어 플래트닝 (Bear-flattening)'; cls='s-sell'; }
-    else { label='플래트닝 (혼조)'; cls='s-neu'; }
+    if(delta10<0 && !drivenBy2y){ label='불 플래트닝 (Bull-flattening)'; cls='s-buy'; type='bullFlat'; }
+    else if(delta2>0 && drivenBy2y){ label='베어 플래트닝 (Bear-flattening)'; cls='s-sell'; type='bearFlat'; }
+    else { label='플래트닝 (혼조)'; cls='s-neu'; type='mixed'; }
   }
   // 모멘텀: 최근 5거래일 변화 속도를 그 이전 15거래일 변화 속도와 비교
   const recentIdx = Math.max(0, series.length-6);
@@ -1079,7 +1083,7 @@ function analyzeSteepening(){
   for(let idx=series.length-1; idx>0; idx--){
     if((series[idx].spread>=0) !== (series[idx-1].spread>=0)){ flipDate = series[idx].t; break; }
   }
-  return {label, cls, delta2, delta10, spreadChange, momentum, flipDate, lastSpread:last.spread, lastDate:last.t, baseDate:base.t};
+  return {label, cls, type, delta2, delta10, spreadChange, momentum, flipDate, lastSpread:last.spread, lastDate:last.t, baseDate:base.t};
 }
 function buildSteepenPanel(){
   const r = analyzeSteepening();
@@ -1102,6 +1106,12 @@ function buildSteepenPanel(){
       ${r.flipDate ? `<br>최근 정상화/역전 전환일: ${r.flipDate}` : '<br>최근 1년 이상 부호 전환 없음 (또는 데이터 범위 밖)'}
     </div>
     <div class="steepen-disclaimer">※ 같은 스프레드 변화라도 원인(2년물 주도 vs 10년물 주도)에 따라 해석이 반대가 될 수 있어요 — 절대 수치만으로 매수/매도를 단정하지 않는 참고용 보조 지표입니다.</div>
+    <div class="steepen-legend">
+      <div class="steepen-legend-item ${r.type==='bullSteep'?'current':''}"><b class="up">불 스티프닝</b> — 스프레드 확대 + 2년물 주도 하락(2Y 하락폭 &gt; 10Y 하락폭, 또는 2Y만 하락) → 완화 기대, 통상 리스크자산 우호적</div>
+      <div class="steepen-legend-item ${r.type==='bearSteep'?'current':''}"><b class="down">베어 스티프닝</b> — 스프레드 확대 + 10년물 주도 상승(10Y 상승폭 &gt; 2Y 상승폭) → 텀프리미엄·재정우려, 위험자산 부정적</div>
+      <div class="steepen-legend-item ${r.type==='bullFlat'?'current':''}"><b class="up">불 플래트닝</b> — 스프레드 축소 + 10년물 주도 하락 → 경기둔화 기대 반영, 성장주에 우호적일 수 있음</div>
+      <div class="steepen-legend-item ${r.type==='bearFlat'?'current':''}"><b class="down">베어 플래트닝</b> — 스프레드 축소 + 2년물 주도 상승 → 연준 긴축 반영, 통상 부정적</div>
+    </div>
   </div>`;
 }
 
