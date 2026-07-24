@@ -239,6 +239,12 @@ select.sigsel option{background:var(--panel);color:var(--ink)}
 .steepen-legend-item{font-size:11.5px;color:var(--muted);line-height:1.5;padding:6px 8px;border-radius:6px}
 .steepen-legend-item b{font-size:11.5px}
 .steepen-legend-item.current{background:var(--accent-bg);color:var(--ink);border:1px solid var(--accent)}
+.steepen-help{font-size:12.5px;line-height:1.7;color:var(--ink)}
+.steepen-help h4{font-size:13px;margin:16px 0 6px;color:var(--accent)}
+.steepen-help h4:first-child{margin-top:0}
+.steepen-help p{margin:6px 0}
+.steepen-help ul{margin:6px 0;padding-left:18px}
+.steepen-help li{margin-bottom:6px}
 .freq-row{display:flex;gap:6px;margin-bottom:10px}
 .freq-tab{font-size:11px;font-weight:700;padding:5px 11px;border-radius:8px;border:1px solid var(--border);
   background:var(--panel);color:var(--muted);cursor:pointer;font-family:inherit}
@@ -547,7 +553,7 @@ const DEFAULT = () => ({
   weights: Object.fromEntries(CATS.map(c=>[c.key, c.weight])),
   open:    Object.fromEntries(CATS.map(c=>[c.key, true])),
   customBands: {}, bandOpen: {},
-  history: {}, trendOpen: {}, trendRange: {}, trendFreq: {}, steepenOpen: {},
+  history: {}, trendOpen: {}, trendRange: {}, trendFreq: {}, steepenOpen: {}, steepenHelpOpen: false,
   manualOverride: {},
   activeTab: 'live', // 'live' | 'analysis'
   analysisReports: [], // {id, title, uploadedAt, content, sizeKB} — 마크다운(.md) 분석 리포트 보관용
@@ -574,6 +580,7 @@ async function load(){
       customBands:{...(saved.customBands||{})}, bandOpen:{...(saved.bandOpen||{})},
       history:{...(saved.history||{})}, trendOpen:{...(saved.trendOpen||{})}, trendRange:{...(saved.trendRange||{})},
       trendFreq:{...(saved.trendFreq||{})}, steepenOpen:{...(saved.steepenOpen||{})},
+      steepenHelpOpen: !!saved.steepenHelpOpen,
       manualOverride:{...(saved.manualOverride||{})},
       activeTab: saved.activeTab==='analysis' ? 'analysis' : 'live',
       analysisReports: Array.isArray(saved.analysisReports) ? saved.analysisReports : [],
@@ -1114,6 +1121,33 @@ function buildSteepenPanel(){
     </div>
   </div>`;
 }
+function buildSteepenHelp(){
+  return `<div class="steepen-help">
+    <h4>스티프닝 분석이란?</h4>
+    <p>10년-2년 금리차(스프레드)가 벌어지거나(스티프닝) 좁아질 때(플래트닝), <b>2년물과 10년물 중 어느 쪽이 그 변화를 주도했는지</b>에 따라 시장이 완전히 다르게 해석돼요. 같은 "+0.3%p 확대"라도 원인에 따라 정반대 신호일 수 있습니다.</p>
+
+    <h4>4가지 유형</h4>
+    <ul>
+      <li><b class="up">불 스티프닝(Bull-steepening)</b>: 스프레드 확대 + 2년물 주도 하락(2Y 하락폭 &gt; 10Y 하락폭, 또는 2Y만 하락) → 완화 기대 반영, 통상 리스크자산에 우호적</li>
+      <li><b class="down">베어 스티프닝(Bear-steepening)</b>: 스프레드 확대 + 10년물 주도 상승(10Y 상승폭 &gt; 2Y 상승폭) → 텀프리미엄·재정우려 반영, 위험자산에 부정적</li>
+      <li><b class="up">불 플래트닝(Bull-flattening)</b>: 스프레드 축소 + 10년물 주도 하락 → 경기둔화 기대 반영, 성장주에 우호적일 수 있음</li>
+      <li><b class="down">베어 플래트닝(Bear-flattening)</b>: 스프레드 축소 + 2년물 주도 상승 → 연준 긴축 반영, 통상 부정적</li>
+    </ul>
+
+    <h4>왜 "가장 최신일" 하루가 아니라 "최근 1개월" 기준인가</h4>
+    <p>국채금리는 하루 단위로도 크게 움직여요. 경매 결과, 지표 발표, 그날그날의 수급 등으로 하루에도 몇 bp씩 흔들리는 게 흔한데, 이런 하루짜리 변동만 보고 판정하면 오늘은 베어 스티프닝, 내일은 불 플래트닝처럼 <b>판정이 하루하루 뒤집히는 문제</b>가 생겨요. 채권시장에서 스티프닝/플래트닝 추세를 이야기할 때 보통 몇 주~한두 달 단위로 보는 게 관행이라, 단발성 노이즈는 걸러지면서도 최근 방향 전환은 놓치지 않는 절충점으로 <b>약 1개월(20거래일)</b>을 기준으로 잡았습니다. 정확히는 "1개월 평균"이 아니라, <b>오늘 값과 약 1개월 전 값, 두 시점만 비교</b>하는 방식이에요.</p>
+
+    <h4>모멘텀은 어떻게 계산되나</h4>
+    <p>1개월 구간을 다시 둘로 쪼개서 비교해요:</p>
+    <ul>
+      <li><b>최근 구간</b>: 최근 5거래일(약 1주일)의 스프레드 변화</li>
+      <li><b>이전 구간</b>: 그 앞의 나머지 약 15거래일(1개월 전 ~ 5거래일 전)의 스프레드 변화</li>
+    </ul>
+    <p>최근 구간의 변화폭이 이전 구간보다 <b>1.3배 이상 크면 "가속"</b>, <b>0.7배 이하로 작으면 "둔화"</b>, 그 사이면 "유지"로 표시돼요. 예를 들어 한 달 전부터 지금까지 스프레드가 총 +0.30%p 벌어졌는데, 그중 최근 5거래일 동안에만 +0.20%p가 새로 벌어졌다면 → 최근 들어 속도가 붙고 있다는 뜻으로 "가속"이 뜹니다. 반대로 앞의 15거래일 동안 대부분 벌어지고 최근 5일은 거의 안 움직였다면 "둔화"가 뜹니다.</p>
+
+    <p class="steepen-disclaimer">※ 이 분석은 참고용 보조 지표이며, 절대 수치만으로 매수/매도를 단정하지 않습니다.</p>
+  </div>`;
+}
 
 const PATH_COLORS = ['#4C8DFF','#34C77B','#E3A93C','#E5484D','#A78BFA','#22D3EE','#F472B6','#FB923C'];
 function pathColor(idx){ return PATH_COLORS[idx % PATH_COLORS.length]; }
@@ -1644,6 +1678,7 @@ function indRow(i){
   toggleRow.appendChild(el(`<button class="band-toggle" data-trendtoggle="${i.key}">${S.trendOpen[i.key]?'▾':'▸'} 추세 보기 ${(S.history[i.key]||[]).length?`(${S.history[i.key].length})`:''}</button>`));
   if(i.key==='t10y2y'){
     toggleRow.appendChild(el(`<button class="band-toggle" data-steepentoggle="${i.key}">${S.steepenOpen[i.key]?'▾':'▸'} 스티프닝 분석</button>`));
+    toggleRow.appendChild(el(`<button class="cal-icon" data-steepenhelp title="스티프닝 분석 설명 보기">❓</button>`));
   }
   fullRow.appendChild(toggleRow);
 
@@ -1699,6 +1734,11 @@ function indRow(i){
     const spanel = el(`<div class="trend-panel"></div>`);
     spanel.innerHTML = buildSteepenPanel();
     fullRow.appendChild(spanel);
+  }
+  if(i.key==='t10y2y' && S.steepenHelpOpen){
+    const hpanel = el(`<div class="trend-panel"></div>`);
+    hpanel.innerHTML = buildSteepenHelp();
+    fullRow.appendChild(hpanel);
   }
 
   if(i.mode!=='manual' && S.bandOpen[i.key]){
@@ -1998,6 +2038,9 @@ function bind(){
       if(!FRED_HIST_CACHE['dgs2']) queryBaseHistory('dgs2');
       if(!FRED_HIST_CACHE['dgs10']) queryBaseHistory('dgs10');
     }
+  });
+  document.querySelectorAll('[data-steepenhelp]').forEach(b=> b.onclick=()=>{
+    S.steepenHelpOpen = !S.steepenHelpOpen; save(); render();
   });
   document.querySelectorAll('[data-notetoggle]').forEach(b=> b.onclick=()=>{
     const k=b.dataset.notetoggle; S.noteOpen[k]=!S.noteOpen[k]; save(); render();
