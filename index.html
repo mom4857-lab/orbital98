@@ -224,6 +224,17 @@ select.sigsel option{background:var(--panel);color:var(--ink)}
 .lg-actual{background:var(--accent)}
 .lg-forecast{background:#E8C547}
 .trend-empty{font-size:11.5px;color:var(--faint);line-height:1.6;padding:8px 2px}
+.steepen-panel{padding:4px 2px}
+.steepen-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.steepen-sub{font-size:11.5px;color:var(--muted)}
+.steepen-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px}
+.steepen-item{display:flex;flex-direction:column;gap:3px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:8px;background:var(--panel-2)}
+.steepen-lbl{font-size:10.5px;color:var(--faint)}
+.steepen-item b{font-size:14px}
+.steepen-note{font-size:12.5px;color:var(--ink);line-height:1.6;padding:10px 12px;border-radius:8px;
+  background:var(--panel-2);margin-bottom:8px}
+.steepen-disclaimer{font-size:11px;color:var(--faint);line-height:1.5}
 .freq-row{display:flex;gap:6px;margin-bottom:10px}
 .freq-tab{font-size:11px;font-weight:700;padding:5px 11px;border-radius:8px;border:1px solid var(--border);
   background:var(--panel);color:var(--muted);cursor:pointer;font-family:inherit}
@@ -532,7 +543,7 @@ const DEFAULT = () => ({
   weights: Object.fromEntries(CATS.map(c=>[c.key, c.weight])),
   open:    Object.fromEntries(CATS.map(c=>[c.key, true])),
   customBands: {}, bandOpen: {},
-  history: {}, trendOpen: {}, trendRange: {}, trendFreq: {},
+  history: {}, trendOpen: {}, trendRange: {}, trendFreq: {}, steepenOpen: {},
   manualOverride: {},
   activeTab: 'live', // 'live' | 'analysis'
   analysisReports: [], // {id, title, uploadedAt, content, sizeKB} — 마크다운(.md) 분석 리포트 보관용
@@ -558,7 +569,7 @@ async function load(){
       weights:{...DEFAULT().weights,...saved.weights}, open:{...DEFAULT().open,...saved.open},
       customBands:{...(saved.customBands||{})}, bandOpen:{...(saved.bandOpen||{})},
       history:{...(saved.history||{})}, trendOpen:{...(saved.trendOpen||{})}, trendRange:{...(saved.trendRange||{})},
-      trendFreq:{...(saved.trendFreq||{})},
+      trendFreq:{...(saved.trendFreq||{})}, steepenOpen:{...(saved.steepenOpen||{})},
       manualOverride:{...(saved.manualOverride||{})},
       activeTab: saved.activeTab==='analysis' ? 'analysis' : 'live',
       analysisReports: Array.isArray(saved.analysisReports) ? saved.analysisReports : [],
@@ -1024,6 +1035,74 @@ function buildTrendChart(i){
     chartHtml = rateHtml(i, hist) + renderTrendSVG(hist, i);
   }
   return chartHtml + histEditableList(i);
+}
+
+// 10년-2년 금리차 전용 — 불 스티프닝/베어 스티프닝 구분 (2년물·10년물 중 어느 쪽이 스프레드 변화를 주도했는지로 판단)
+function buildSpreadSeries(){
+  const c2 = FRED_HIST_CACHE['dgs2'], c10 = FRED_HIST_CACHE['dgs10'];
+  if(!c2 || !c10 || c2.loading || c10.loading || c2.error || c10.error || !c2.points || !c10.points) return null;
+  const m2 = new Map(c2.points.filter(p=>p.v!=null && !isNaN(p.v)).map(p=>[p.t,p.v]));
+  const m10 = new Map(c10.points.filter(p=>p.v!=null && !isNaN(p.v)).map(p=>[p.t,p.v]));
+  const dates = [...m10.keys()].filter(t=>m2.has(t)).sort();
+  if(dates.length<25) return null;
+  return dates.map(t=>({t, v2:m2.get(t), v10:m10.get(t), spread: round(m10.get(t)-m2.get(t),3)}));
+}
+function analyzeSteepening(){
+  const series = buildSpreadSeries();
+  if(!series) return null;
+  const last = series[series.length-1];
+  const baseIdx = Math.max(0, series.length-21); // 약 1개월(20거래일) 전 대비
+  const base = series[baseIdx];
+  const delta2 = round(last.v2-base.v2,3), delta10 = round(last.v10-base.v10,3);
+  const spreadChange = round(last.spread-base.spread,3);
+  const steepening = spreadChange>0;
+  const drivenBy2y = Math.abs(delta2) > Math.abs(delta10);
+  let label, cls;
+  if(steepening){
+    if(delta2<0 && drivenBy2y){ label='불 스티프닝 (Bull-steepening)'; cls='s-buy'; }
+    else if(delta10>0 && !drivenBy2y){ label='베어 스티프닝 (Bear-steepening)'; cls='s-sell'; }
+    else { label='스티프닝 (혼조)'; cls='s-neu'; }
+  } else {
+    if(delta10<0 && !drivenBy2y){ label='불 플래트닝 (Bull-flattening)'; cls='s-buy'; }
+    else if(delta2>0 && drivenBy2y){ label='베어 플래트닝 (Bear-flattening)'; cls='s-sell'; }
+    else { label='플래트닝 (혼조)'; cls='s-neu'; }
+  }
+  // 모멘텀: 최근 5거래일 변화 속도를 그 이전 15거래일 변화 속도와 비교
+  const recentIdx = Math.max(0, series.length-6);
+  const recentChange = round(last.spread-series[recentIdx].spread,3);
+  const priorChange = round(series[recentIdx].spread-base.spread,3);
+  let momentum;
+  if(Math.abs(priorChange)<0.001) momentum = Math.abs(recentChange)>0.02 ? '가속' : '유지';
+  else momentum = Math.abs(recentChange) > Math.abs(priorChange)*1.3 ? '가속' : (Math.abs(recentChange) < Math.abs(priorChange)*0.7 ? '둔화' : '유지');
+  // 부호 전환(역전 ↔ 정상화) 시점 — 가장 최근에 스프레드가 0을 넘나든 날짜
+  let flipDate = null;
+  for(let idx=series.length-1; idx>0; idx--){
+    if((series[idx].spread>=0) !== (series[idx-1].spread>=0)){ flipDate = series[idx].t; break; }
+  }
+  return {label, cls, delta2, delta10, spreadChange, momentum, flipDate, lastSpread:last.spread, lastDate:last.t, baseDate:base.t};
+}
+function buildSteepenPanel(){
+  const r = analyzeSteepening();
+  if(!r){
+    return `<div class="trend-empty"><span class="spin"></span> 2년물·10년물 데이터 조회 중… (둘 다 필요해서 조금 걸릴 수 있어요)</div>`;
+  }
+  return `<div class="steepen-panel">
+    <div class="steepen-head">
+      <span class="sigpill ${r.cls}">${r.label}</span>
+      <span class="steepen-sub">최근 1개월(${r.baseDate} → ${r.lastDate}) 기준</span>
+    </div>
+    <div class="steepen-grid">
+      <div class="steepen-item"><span class="steepen-lbl">스프레드 변화</span><b class="${r.spreadChange>=0?'up':'down'}">${r.spreadChange>=0?'+':''}${r.spreadChange}%p</b></div>
+      <div class="steepen-item"><span class="steepen-lbl">2년물 변화</span><b class="${r.delta2>=0?'up':'down'}">${r.delta2>=0?'+':''}${r.delta2}%p</b></div>
+      <div class="steepen-item"><span class="steepen-lbl">10년물 변화</span><b class="${r.delta10>=0?'up':'down'}">${r.delta10>=0?'+':''}${r.delta10}%p</b></div>
+      <div class="steepen-item"><span class="steepen-lbl">모멘텀</span><b>${r.momentum}</b></div>
+    </div>
+    <div class="steepen-note">
+      ${Math.abs(r.delta2)>Math.abs(r.delta10) ? '2년물(단기금리)이 스프레드 변화를 주도 — 연준 정책 기대(인하/인상) 변화 쪽에 무게' : '10년물(장기금리)이 스프레드 변화를 주도 — 인플레이션·재정·텀프리미엄 등 채권시장 자체 우려 쪽에 무게'}
+      ${r.flipDate ? `<br>최근 정상화/역전 전환일: ${r.flipDate}` : '<br>최근 1년 이상 부호 전환 없음 (또는 데이터 범위 밖)'}
+    </div>
+    <div class="steepen-disclaimer">※ 같은 스프레드 변화라도 원인(2년물 주도 vs 10년물 주도)에 따라 해석이 반대가 될 수 있어요 — 절대 수치만으로 매수/매도를 단정하지 않는 참고용 보조 지표입니다.</div>
+  </div>`;
 }
 
 const PATH_COLORS = ['#4C8DFF','#34C77B','#E3A93C','#E5484D','#A78BFA','#22D3EE','#F472B6','#FB923C'];
@@ -1553,6 +1632,9 @@ function indRow(i){
     toggleRow.appendChild(el(`<button class="band-toggle" data-overridetoggle="${i.key}">${S.bandOpen[i.key+'__ov']?'▾':'▸'} 수동 재정의${ov&&ov!=='auto'?' · 적용중':''}</button>`));
   }
   toggleRow.appendChild(el(`<button class="band-toggle" data-trendtoggle="${i.key}">${S.trendOpen[i.key]?'▾':'▸'} 추세 보기 ${(S.history[i.key]||[]).length?`(${S.history[i.key].length})`:''}</button>`));
+  if(i.key==='t10y2y'){
+    toggleRow.appendChild(el(`<button class="band-toggle" data-steepentoggle="${i.key}">${S.steepenOpen[i.key]?'▾':'▸'} 스티프닝 분석</button>`));
+  }
   fullRow.appendChild(toggleRow);
 
   if(i.mode!=='manual' && S.bandOpen[i.key+'__ov']){
@@ -1599,6 +1681,14 @@ function indRow(i){
     chartDiv.innerHTML = buildTrendChart(i);
     tpanel.appendChild(chartDiv);
     fullRow.appendChild(tpanel);
+  }
+
+  if(i.key==='t10y2y' && S.steepenOpen[i.key]){
+    if(!FRED_HIST_CACHE['dgs2']) queryBaseHistory('dgs2');
+    if(!FRED_HIST_CACHE['dgs10']) queryBaseHistory('dgs10');
+    const spanel = el(`<div class="trend-panel"></div>`);
+    spanel.innerHTML = buildSteepenPanel();
+    fullRow.appendChild(spanel);
   }
 
   if(i.mode!=='manual' && S.bandOpen[i.key]){
@@ -1889,6 +1979,14 @@ function bind(){
       if(!FRED_HIST_CACHE[k]) queryBaseHistory(k); // 기본 24개월 — 표시 기본값 + 전월비/전년비 계산용, 한 번만
       const range = S.trendRange[k];
       if((range && (range.from || range.to)) && !FRED_QUERY_CACHE[k]) queryTrend(k); // 이전에 커스텀 기간을 지정해뒀다면 그것도 반영
+    }
+  });
+  document.querySelectorAll('[data-steepentoggle]').forEach(b=> b.onclick=()=>{
+    const k=b.dataset.steepentoggle; const opening=!S.steepenOpen[k];
+    S.steepenOpen[k]=opening; save(); render();
+    if(opening){
+      if(!FRED_HIST_CACHE['dgs2']) queryBaseHistory('dgs2');
+      if(!FRED_HIST_CACHE['dgs10']) queryBaseHistory('dgs10');
     }
   });
   document.querySelectorAll('[data-notetoggle]').forEach(b=> b.onclick=()=>{
